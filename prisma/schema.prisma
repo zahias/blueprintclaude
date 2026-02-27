@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Auth ───────────────────────────────────────────────────────────────────────
+
+model Admin {
+  id           String          @id @default(uuid())
+  email        String          @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime        @default(now())
+  comments     ReviewComment[]
+}
+
+// ─── Academic Structure ─────────────────────────────────────────────────────────
+
+model Major {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  courses     Course[]
+}
+
+model Course {
+  id          String            @id @default(uuid())
+  majorId     String
+  major       Major             @relation(fields: [majorId], references: [id], onDelete: Cascade)
+  code        String
+  name        String
+  description String?
+  createdAt   DateTime          @default(now())
+  topics      Topic[]
+  los         LearningOutcome[]
+  blueprints  Blueprint[]
+
+  @@unique([majorId, code])
+}
+
+model Topic {
+  id          String    @id @default(uuid())
+  courseId     String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  los         TopicLO[]
+  blueprintTopics BlueprintTopic[]
+}
+
+model LearningOutcome {
+  id          String    @id @default(uuid())
+  courseId     String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  code        String
+  description String
+  createdAt   DateTime  @default(now())
+  topics      TopicLO[]
+}
+
+model TopicLO {
+  topicId           String
+  learningOutcomeId String
+  topic             Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  learningOutcome   LearningOutcome @relation(fields: [learningOutcomeId], references: [id], onDelete: Cascade)
+
+  @@id([topicId, learningOutcomeId])
+}
+
+// ─── Blueprints ─────────────────────────────────────────────────────────────────
+
+enum BlueprintStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum QuestionType {
+  MCQ
+  SHORT_ANSWER
+  ESSAY
+  TRUE_FALSE
+  PROBLEM_SOLVING
+}
+
+model Blueprint {
+  id             String          @id @default(uuid())
+  courseId        String
+  course         Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructorName String
+  title          String
+  examDate       DateTime?
+  duration       Int?            // minutes
+  totalMarks     Float
+  status         BlueprintStatus @default(DRAFT)
+  accessToken    String          @unique @default(uuid())
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  topics         BlueprintTopic[]
+  comments       ReviewComment[]
+}
+
+model BlueprintTopic {
+  id              String                @id @default(uuid())
+  blueprintId     String
+  blueprint       Blueprint             @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  topicId         String
+  topic           Topic                 @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  questionCount   Int
+  totalPoints     Float
+  bloomRemember   Int                   @default(0)
+  bloomUnderstand Int                   @default(0)
+  bloomApply      Int                   @default(0)
+  bloomAnalyze    Int                   @default(0)
+  bloomEvaluate   Int                   @default(0)
+  bloomCreate     Int                   @default(0)
+  questionTypes   BlueprintTopicQType[]
+}
+
+model BlueprintTopicQType {
+  id               String         @id @default(uuid())
+  blueprintTopicId String
+  blueprintTopic   BlueprintTopic @relation(fields: [blueprintTopicId], references: [id], onDelete: Cascade)
+  questionType     QuestionType
+  count            Int
+}
+
+model ReviewComment {
+  id          String    @id @default(uuid())
+  blueprintId String
+  blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  adminId     String
+  admin       Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  content     String
+  createdAt   DateTime  @default(now())
+}
