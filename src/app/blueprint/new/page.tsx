@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import TopicBuilder from "@/components/TopicBuilder";
 import QADashboard from "@/components/QADashboard";
 import { BLOOM_LEVELS } from "@/lib/constants";
+import type { BlueprintTopicEntry } from "@/lib/types";
 
 interface Major {
   id: string;
@@ -33,19 +34,6 @@ interface TopicData {
   name: string;
   description: string | null;
   los: TopicLOData[];
-}
-
-export interface BlueprintTopicEntry {
-  topicId: string;
-  questionCount: number;
-  totalPoints: number;
-  bloomRemember: number;
-  bloomUnderstand: number;
-  bloomApply: number;
-  bloomAnalyze: number;
-  bloomEvaluate: number;
-  bloomCreate: number;
-  questionTypes: { questionType: string; count: number }[];
 }
 
 type Step = "major" | "course" | "metadata" | "builder" | "review";

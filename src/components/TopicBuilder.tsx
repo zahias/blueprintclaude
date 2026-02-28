@@ -1,7 +1,8 @@
 "use client";
 
 import { BLOOM_LEVELS, QUESTION_TYPES } from "@/lib/constants";
-import type { BlueprintTopicEntry } from "@/app/blueprint/new/page";
+import type { BlueprintTopicEntry } from "@/lib/types";
+import HelpTooltip from "@/components/HelpTooltip";
 
 interface TopicLOData {
   learningOutcomeId: string;
@@ -171,9 +172,12 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
             {/* Bloom's Distribution */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium text-gray-500">
-                  Bloom&apos;s Distribution
-                </label>
+                <div className="flex items-center gap-1">
+                  <label className="text-xs font-medium text-gray-500">
+                    Bloom&apos;s Distribution
+                  </label>
+                  <HelpTooltip text="Distribute your questions across Bloom's cognitive levels. The total must equal the number of questions." />
+                </div>
                 <span className={`text-xs ${bloomValid ? "text-green-600" : "text-red-500 font-medium"}`}>
                   {bloomSum}/{entry.questionCount} questions
                   {!bloomValid && " ⚠️"}
@@ -184,7 +188,10 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
                   const key = bloom.key as keyof BlueprintTopicEntry;
                   return (
                     <div key={bloom.key}>
-                      <label className="block text-[10px] text-gray-500 mb-0.5">{bloom.label}</label>
+                      <div className="flex items-center gap-0.5 mb-0.5">
+                        <label className="block text-[10px] text-gray-500">{bloom.label}</label>
+                        <HelpTooltip text={bloom.description} />
+                      </div>
                       <input
                         type="number"
                         min={0}
@@ -208,9 +215,12 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
             {/* Question Types */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium text-gray-500">
-                  Question Types
-                </label>
+                <div className="flex items-center gap-1">
+                  <label className="text-xs font-medium text-gray-500">
+                    Question Types
+                  </label>
+                  <HelpTooltip text="Specify how many questions of each type. The total must equal the number of questions." />
+                </div>
                 <span className={`text-xs ${qTypeValid ? "text-green-600" : "text-red-500 font-medium"}`}>
                   {qTypeSum}/{entry.questionCount} questions
                   {!qTypeValid && " ⚠️"}
@@ -220,8 +230,11 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
                 {QUESTION_TYPES.map((qt) => {
                   const existing = entry.questionTypes.find((x) => x.questionType === qt.value);
                   return (
-                    <div key={qt.value} className="flex items-center gap-1.5">
-                      <label className="text-[10px] text-gray-500 whitespace-nowrap flex-1">{qt.label}</label>
+                    <div key={qt.value} className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5 flex-1">
+                        <label className="text-[10px] text-gray-500 whitespace-nowrap">{qt.label}</label>
+                        <HelpTooltip text={qt.description} />
+                      </div>
                       <input
                         type="number"
                         min={0}

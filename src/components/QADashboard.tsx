@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { BLOOM_LEVELS } from "@/lib/constants";
+import HelpTooltip from "@/components/HelpTooltip";
 
 interface TopicEntry {
   questionCount: number;
@@ -110,7 +111,10 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
 
       {/* HOT/LOT bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <p className="text-xs text-gray-400 mb-2">Cognitive Balance</p>
+        <div className="flex items-center gap-1 mb-2">
+          <p className="text-xs text-gray-400">Cognitive Balance</p>
+          <HelpTooltip text="LOT (Lower-Order Thinking): Remember, Understand, Apply. HOT (Higher-Order Thinking): Analyze, Evaluate, Create. A good exam typically has 40-60% HOT questions." />
+        </div>
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs text-gray-500 w-20">LOT {lotPercent}%</span>
           <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden flex">
@@ -134,7 +138,10 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
       {/* Bloom Pie Chart */}
       {bloomData.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-400 mb-2">Bloom&apos;s Distribution</p>
+          <div className="flex items-center gap-1 mb-2">
+            <p className="text-xs text-gray-400">Bloom&apos;s Distribution</p>
+            <HelpTooltip text="Visual breakdown of questions across Bloom's taxonomy levels. A well-designed assessment typically covers multiple cognitive levels." />
+          </div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie
@@ -160,7 +167,10 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
       {/* LO Points Bar Chart */}
       {loData.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-400 mb-2">Points per Learning Outcome</p>
+          <div className="flex items-center gap-1 mb-2">
+            <p className="text-xs text-gray-400">Points per Learning Outcome</p>
+            <HelpTooltip text="Shows how marks are distributed across learning outcomes. Points are split equally among LOs tied to each topic." />
+          </div>
           <ResponsiveContainer width="100%" height={Math.max(150, loData.length * 35)}>
             <BarChart data={loData} layout="vertical" margin={{ left: 10, right: 20 }}>
               <XAxis type="number" tick={{ fontSize: 10 }} />
@@ -175,7 +185,10 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
       {/* LO Coverage Table */}
       {loCoverage.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-400 mb-2">Learning Outcome Coverage</p>
+          <div className="flex items-center gap-1 mb-2">
+            <p className="text-xs text-gray-400">Learning Outcome Coverage</p>
+            <HelpTooltip text="Shows which course learning outcomes (CLOs) are assessed by at least one topic. Uncovered LOs indicate gaps in assessment alignment." />
+          </div>
           <div className="space-y-1.5">
             {loCoverage.map((lo) => (
               <div

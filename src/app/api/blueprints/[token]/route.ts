@@ -99,7 +99,7 @@ export async function PUT(
     }
   }
 
-  const { instructorName, title, examDate, duration, totalMarks, topics, status } = body;
+  const { instructorName, title, examDate, duration, totalMarks, topics, status, semester, academicYear } = body;
 
   // Delete existing blueprint topics and recreate
   await prisma.blueprintTopic.deleteMany({ where: { blueprintId: existing.id } });
@@ -113,6 +113,8 @@ export async function PUT(
       duration: duration || null,
       totalMarks: parseFloat(totalMarks),
       status: status || existing.status,
+      semester: semester || null,
+      academicYear: academicYear || null,
       topics: topics?.length
         ? {
             create: topics.map(

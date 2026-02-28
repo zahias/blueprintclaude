@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import Link from "next/link";
 import { BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS, BLOOM_LEVELS } from "@/lib/constants";
 import QADashboard from "@/components/QADashboard";
@@ -14,6 +14,8 @@ interface Blueprint {
   duration: number | null;
   totalMarks: number;
   status: string;
+  semester: string | null;
+  academicYear: string | null;
   createdAt: string;
   course: {
     code: string;
@@ -47,17 +49,17 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
 
-  async function loadBlueprint() {
+  const loadBlueprint = useCallback(async () => {
     const res = await fetch(`/api/blueprints/${id}`);
     if (res.ok) setBlueprint(await res.json());
     setLoading(false);
-  }
+  }, [id]);
 
   useEffect(() => {
     loadBlueprint();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [loadBlueprint]);
 
   async function handleReview(status: "APPROVED" | "REJECTED") {
     setSubmitting(true);
@@ -84,13 +86,81 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     setSubmitting(false);
   }
 
+  function copyToken() {
+    if (!blueprint) return;
+    navigator.clipboard.writeText(blueprint.accessToken);
+    setCopiedToken(true);
+    setTimeout(() => setCopiedToken(false), 2000);
+  }
+
+  async function downloadReviewPDF() {
+    if (!blueprint) return;
+    const { default: jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF();
+
+    doc.setFontSize(18);
+    doc.text(blueprint.title, 14, 22);
+    doc.setFontSize(10);
+    doc.text(`${blueprint.course.code} — ${blueprint.course.name} | ${blueprint.course.major.name}`, 14, 30);
+    doc.text(`Instructor: ${blueprint.instructorName} | Total Marks: ${blueprint.totalMarks}`, 14, 36);
+    if (blueprint.semester && blueprint.academicYear) {
+      doc.text(`Semester: ${blueprint.semester} ${blueprint.academicYear}`, 14, 42);
+    }
+    doc.setFontSize(12);
+    doc.setTextColor(blueprint.status === "APPROVED" ? 22 : blueprint.status === "REJECTED" ? 220 : 100,
+      blueprint.status === "APPROVED" ? 163 : blueprint.status === "REJECTED" ? 38 : 100,
+      blueprint.status === "APPROVED" ? 74 : blueprint.status === "REJECTED" ? 38 : 100);
+    doc.text(`Status: ${BLUEPRINT_STATUS_LABELS[blueprint.status]}`, 14, 50);
+    doc.setTextColor(0);
+
+    // Topic breakdown table
+    const bloomKeys = BLOOM_LEVELS.map((b) => b.key);
+    const topicRows = blueprint.topics.map((bt) => [
+      bt.topic.name,
+      String(bt.questionCount),
+      String(bt.totalPoints),
+      ...bloomKeys.map((k) => String((bt as unknown as Record<string, number>)[k] || 0)),
+      bt.questionTypes.map((qt) => `${qt.questionType}: ${qt.count}`).join(", "),
+    ]);
+
+    autoTable(doc, {
+      startY: 58,
+      head: [["Topic", "Qs", "Pts", ...BLOOM_LEVELS.map((b) => b.label.slice(0, 3)), "Q Types"]],
+      body: topicRows,
+      styles: { fontSize: 7 },
+      headStyles: { fillColor: [79, 70, 229] },
+    });
+
+    // Comments section
+    if (blueprint.comments.length > 0) {
+      const finalY = ((doc as unknown as Record<string, Record<string, number>>).lastAutoTable?.finalY) ?? 120;
+      doc.setFontSize(12);
+      doc.text("Review Comments", 14, finalY + 12);
+      const commentRows = blueprint.comments.map((c) => [
+        c.admin.name,
+        new Date(c.createdAt).toLocaleString(),
+        c.content,
+      ]);
+      autoTable(doc, {
+        startY: finalY + 18,
+        head: [["Reviewer", "Date", "Comment"]],
+        body: commentRows,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [79, 70, 229] },
+      });
+    }
+
+    doc.save(`review-${blueprint.course.code}-${blueprint.title.replace(/\s+/g, "_")}.pdf`);
+  }
+
   if (loading) return <div className="text-gray-500">Loading...</div>;
   if (!blueprint) return <div className="text-red-500">Blueprint not found</div>;
 
   return (
     <div>
       <Link href="/admin/reviews" className="text-indigo-600 hover:text-indigo-800 text-sm mb-4 inline-block">
-        ← Back to Reviews
+        &larr; Back to Reviews
       </Link>
 
       {/* Header */}
@@ -105,7 +175,15 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
               By: {blueprint.instructorName} • Total: {blueprint.totalMarks} pts
               {blueprint.duration && ` • ${blueprint.duration} min`}
               {blueprint.examDate && ` • ${new Date(blueprint.examDate).toLocaleDateString()}`}
+              {blueprint.semester && blueprint.academicYear && ` • ${blueprint.semester} ${blueprint.academicYear}`}
             </p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-gray-400">Token:</span>
+              <code className="text-xs bg-gray-100 px-2 py-0.5 rounded font-mono">{blueprint.accessToken}</code>
+              <button onClick={copyToken} className="text-xs text-indigo-600 hover:text-indigo-800">
+                {copiedToken ? "Copied!" : "Copy"}
+              </button>
+            </div>
           </div>
           <span className={`inline-block px-3 py-1.5 rounded-full text-sm font-semibold ${BLUEPRINT_STATUS_COLORS[blueprint.status]}`}>
             {BLUEPRINT_STATUS_LABELS[blueprint.status]}
@@ -113,24 +191,32 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         </div>
 
         {/* Review actions */}
-        {blueprint.status === "SUBMITTED" && (
-          <div className="mt-4 flex gap-3 pt-4 border-t border-gray-200">
-            <button
-              onClick={() => handleReview("APPROVED")}
-              disabled={submitting}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium disabled:opacity-50"
-            >
-              Approve
-            </button>
-            <button
-              onClick={() => handleReview("REJECTED")}
-              disabled={submitting}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium disabled:opacity-50"
-            >
-              Reject
-            </button>
-          </div>
-        )}
+        <div className="mt-4 flex gap-3 pt-4 border-t border-gray-200">
+          {blueprint.status === "SUBMITTED" && (
+            <>
+              <button
+                onClick={() => handleReview("APPROVED")}
+                disabled={submitting}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium disabled:opacity-50"
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => handleReview("REJECTED")}
+                disabled={submitting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium disabled:opacity-50"
+              >
+                Reject
+              </button>
+            </>
+          )}
+          <button
+            onClick={downloadReviewPDF}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm font-medium"
+          >
+            Download Review PDF
+          </button>
+        </div>
       </div>
 
       {/* Topic breakdown table */}

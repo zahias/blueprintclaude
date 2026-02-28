@@ -5,35 +5,32 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const navItems = [
-  { href: "/admin", label: "Dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
-  { href: "/admin/majors", label: "Majors", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
-  { href: "/admin/courses", label: "Courses", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
-  { href: "/admin/reviews", label: "Reviews", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
-  { href: "/admin/instructors", label: "Instructors", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
+  { href: "/instructor", label: "My Blueprints", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+  { href: "/instructor/new", label: "New Blueprint", icon: "M12 4v16m8-8H4" },
 ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function InstructorLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [adminName, setAdminName] = useState("");
+  const [instructorName, setInstructorName] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/instructor/me")
       .then((res) => {
         if (!res.ok) {
-          router.push("/admin/login");
+          router.push("/instructor/login");
           return null;
         }
         return res.json();
       })
       .then((data) => {
-        if (data?.admin) setAdminName(data.admin.name);
+        if (data?.instructor) setInstructorName(data.instructor.name);
       });
   }, [router]);
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/admin/login");
+    await fetch("/api/instructor/logout", { method: "POST" });
+    router.push("/instructor/login");
   }
 
   return (
@@ -53,7 +50,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => {
-            const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+            const active = pathname === item.href || (item.href !== "/instructor" && pathname.startsWith(item.href));
             return (
               <Link
                 key={item.href}
@@ -75,7 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <div className="p-4 border-t border-gray-800">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400 truncate">{adminName}</span>
+            <span className="text-sm text-gray-400 truncate">{instructorName}</span>
             <button
               onClick={handleLogout}
               className="text-sm text-gray-400 hover:text-white transition"

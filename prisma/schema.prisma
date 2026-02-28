@@ -18,6 +18,16 @@ model Admin {
   comments     ReviewComment[]
 }
 
+model Instructor {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  blueprints   Blueprint[]
+}
+
 // ─── Academic Structure ─────────────────────────────────────────────────────────
 
 model Major {
@@ -83,6 +93,12 @@ enum BlueprintStatus {
   REJECTED
 }
 
+enum Semester {
+  FALL
+  SPRING
+  SUMMER
+}
+
 enum QuestionType {
   MCQ
   SHORT_ANSWER
@@ -95,8 +111,12 @@ model Blueprint {
   id             String          @id @default(uuid())
   courseId        String
   course         Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructorId   String?
+  instructor     Instructor?     @relation(fields: [instructorId], references: [id])
   instructorName String
   title          String
+  semester       Semester?
+  academicYear   String?         // e.g. "2025/2026"
   examDate       DateTime?
   duration       Int?            // minutes
   totalMarks     Float

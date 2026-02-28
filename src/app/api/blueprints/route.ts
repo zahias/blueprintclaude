@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminFromCookies } from "@/lib/auth";
+import { getInstructorFromCookies } from "@/lib/instructorAuth";
 
-// Public: create blueprint; Admin: list all blueprints
+// Admin: list all blueprints with optional filters
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromCookies();
   const status = req.nextUrl.searchParams.get("status");
-  const where = status ? { status: status as "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" } : {};
+  const semester = req.nextUrl.searchParams.get("semester");
+  const academicYear = req.nextUrl.searchParams.get("academicYear");
 
-  // If not admin, only allow fetching with an accessToken (done in /api/blueprints/[token])
   if (!admin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const where: Record<string, unknown> = {};
+  if (status) where.status = status;
+  if (semester) where.semester = semester;
+  if (academicYear) where.academicYear = academicYear;
 
   const blueprints = await prisma.blueprint.findMany({
     where,
@@ -26,7 +32,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { courseId, instructorName, title, examDate, duration, totalMarks, topics } = body;
+  const { courseId, instructorName, title, examDate, duration, totalMarks, topics, status, semester, academicYear } = body;
 
   if (!courseId || !instructorName || !title || totalMarks === undefined) {
     return NextResponse.json(
@@ -35,14 +41,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Try to get instructor from cookies for linking
+  const instructor = await getInstructorFromCookies();
+
   const blueprint = await prisma.blueprint.create({
     data: {
       courseId,
       instructorName,
+      instructorId: instructor?.id || null,
       title,
+      semester: semester || null,
+      academicYear: academicYear || null,
       examDate: examDate ? new Date(examDate) : null,
       duration: duration || null,
       totalMarks: parseFloat(totalMarks),
+      status: status || "DRAFT",
       topics: topics?.length
         ? {
             create: topics.map(
