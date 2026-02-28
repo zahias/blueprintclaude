@@ -95,60 +95,155 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
 
   async function downloadReviewPDF() {
     if (!blueprint) return;
-    const { default: jsPDF } = await import("jspdf");
+    const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: "landscape" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const getLastY = () => ((doc as any).lastAutoTable?.finalY as number) ?? 120;
 
+    // ─── Title + Status ───
     doc.setFontSize(18);
-    doc.text(blueprint.title, 14, 22);
-    doc.setFontSize(10);
-    doc.text(`${blueprint.course.code} — ${blueprint.course.name} | ${blueprint.course.major.name}`, 14, 30);
-    doc.text(`Instructor: ${blueprint.instructorName} | Total Marks: ${blueprint.totalMarks}`, 14, 36);
-    if (blueprint.semester && blueprint.academicYear) {
-      doc.text(`Semester: ${blueprint.semester} ${blueprint.academicYear}`, 14, 42);
-    }
+    doc.text("Assessment Blueprint — Review", pageWidth / 2, 20, { align: "center" });
+    doc.setFontSize(11);
+    doc.text(`Title: ${blueprint.title}`, 14, 33);
+    doc.text(`Course: ${blueprint.course.code} — ${blueprint.course.name}`, 14, 40);
+    doc.text(`Major: ${blueprint.course.major.name}`, 14, 47);
+    doc.text(`Instructor: ${blueprint.instructorName}`, 14, 54);
+    doc.text(`Total Marks: ${blueprint.totalMarks}`, pageWidth / 2, 33);
+    if (blueprint.duration) doc.text(`Duration: ${blueprint.duration} min`, pageWidth / 2, 40);
+    if (blueprint.examDate) doc.text(`Date: ${new Date(blueprint.examDate).toLocaleDateString()}`, pageWidth / 2, 47);
+    if (blueprint.semester && blueprint.academicYear) doc.text(`Semester: ${blueprint.semester} ${blueprint.academicYear}`, pageWidth / 2, 54);
+
+    // Status with color
     doc.setFontSize(12);
-    doc.setTextColor(blueprint.status === "APPROVED" ? 22 : blueprint.status === "REJECTED" ? 220 : 100,
-      blueprint.status === "APPROVED" ? 163 : blueprint.status === "REJECTED" ? 38 : 100,
-      blueprint.status === "APPROVED" ? 74 : blueprint.status === "REJECTED" ? 38 : 100);
-    doc.text(`Status: ${BLUEPRINT_STATUS_LABELS[blueprint.status]}`, 14, 50);
+    const statusColors: Record<string, [number, number, number]> = {
+      APPROVED: [22, 163, 74], REJECTED: [220, 38, 38], SUBMITTED: [37, 99, 235], DRAFT: [107, 114, 128],
+    };
+    const sc = statusColors[blueprint.status] || [0, 0, 0];
+    doc.setTextColor(sc[0], sc[1], sc[2]);
+    doc.text(`Status: ${BLUEPRINT_STATUS_LABELS[blueprint.status]}`, 14, 62);
     doc.setTextColor(0);
 
-    // Topic breakdown table
-    const bloomKeys = BLOOM_LEVELS.map((b) => b.key);
+    // ─── Topic Breakdown ───
+    const QTYPES = ["MCQ", "SHORT_ANSWER", "ESSAY", "TRUE_FALSE", "PROBLEM_SOLVING"];
     const topicRows = blueprint.topics.map((bt) => [
       bt.topic.name,
+      bt.topic.los.map((l) => l.learningOutcome.code).join(", "),
       String(bt.questionCount),
       String(bt.totalPoints),
-      ...bloomKeys.map((k) => String((bt as unknown as Record<string, number>)[k] || 0)),
+      ...BLOOM_LEVELS.map((b) => String((bt as unknown as Record<string, number>)[b.key] || 0)),
       bt.questionTypes.map((qt) => `${qt.questionType}: ${qt.count}`).join(", "),
     ]);
-
+    const totalQ = blueprint.topics.reduce((s, t) => s + t.questionCount, 0);
+    const totalP = blueprint.topics.reduce((s, t) => s + t.totalPoints, 0);
+    topicRows.push([
+      "TOTAL", "", String(totalQ), String(totalP),
+      ...BLOOM_LEVELS.map((b) => String(blueprint.topics.reduce((s, t) => s + ((t as unknown as Record<string, number>)[b.key] || 0), 0))),
+      "",
+    ]);
     autoTable(doc, {
-      startY: 58,
-      head: [["Topic", "Qs", "Pts", ...BLOOM_LEVELS.map((b) => b.label.slice(0, 3)), "Q Types"]],
+      startY: 68,
+      head: [["Topic", "LOs", "Qs", "Pts", "Rem", "Und", "App", "Ana", "Eva", "Cre", "Q Types"]],
       body: topicRows,
-      styles: { fontSize: 7 },
+      styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [79, 70, 229] },
+      theme: "grid",
     });
 
-    // Comments section
-    if (blueprint.comments.length > 0) {
-      const finalY = ((doc as unknown as Record<string, Record<string, number>>).lastAutoTable?.finalY) ?? 120;
-      doc.setFontSize(12);
-      doc.text("Review Comments", 14, finalY + 12);
-      const commentRows = blueprint.comments.map((c) => [
-        c.admin.name,
-        new Date(c.createdAt).toLocaleString(),
-        c.content,
-      ]);
-      autoTable(doc, {
-        startY: finalY + 18,
-        head: [["Reviewer", "Date", "Comment"]],
-        body: commentRows,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [79, 70, 229] },
+    // ─── LO Coverage ───
+    let y = getLastY() + 12;
+    if (y > doc.internal.pageSize.getHeight() - 50) { doc.addPage(); y = 20; }
+    doc.setFontSize(12);
+    doc.text("Learning Outcome Coverage", 14, y);
+    y += 5;
+    const loPointsMap: Record<string, number> = {};
+    const loCoveredSet = new Set<string>();
+    blueprint.topics.forEach((t) => {
+      const topicLOs = t.topic.los || [];
+      const pplo = topicLOs.length > 0 ? t.totalPoints / topicLOs.length : 0;
+      topicLOs.forEach((tl) => {
+        loCoveredSet.add(tl.learningOutcomeId);
+        loPointsMap[tl.learningOutcomeId] = (loPointsMap[tl.learningOutcomeId] || 0) + pplo;
       });
+    });
+    const loRows = (blueprint.course.los || []).map((lo) => [
+      lo.code, lo.description,
+      loCoveredSet.has(lo.id) ? "Yes" : "NO",
+      Math.round((loPointsMap[lo.id] || 0) * 10) / 10 + " pts",
+    ]);
+    autoTable(doc, {
+      startY: y,
+      head: [["Code", "Description", "Covered?", "Points"]],
+      body: loRows,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [79, 70, 229] },
+      theme: "grid",
+      didParseCell(data) {
+        if (data.section === "body" && data.column.index === 2) {
+          if (data.cell.raw === "NO") {
+            data.cell.styles.textColor = [220, 38, 38];
+            data.cell.styles.fontStyle = "bold";
+          } else {
+            data.cell.styles.textColor = [22, 163, 74];
+          }
+        }
+      },
+    });
+
+    // ─── Bloom's Summary ───
+    y = getLastY() + 12;
+    if (y > doc.internal.pageSize.getHeight() - 50) { doc.addPage(); y = 20; }
+    doc.setFontSize(12);
+    doc.text("Bloom's Taxonomy Summary", 14, y);
+    y += 5;
+    const lot = blueprint.topics.reduce((s, t) => s + t.bloomRemember + t.bloomUnderstand + t.bloomApply, 0);
+    const hot = blueprint.topics.reduce((s, t) => s + t.bloomAnalyze + t.bloomEvaluate + t.bloomCreate, 0);
+    const btotal = lot + hot;
+    autoTable(doc, {
+      startY: y,
+      head: [["Category", "Questions", "Percentage"]],
+      body: [
+        ["Lower-Order Thinking (Remember, Understand, Apply)", String(lot), btotal > 0 ? Math.round((lot / btotal) * 100) + "%" : "0%"],
+        ["Higher-Order Thinking (Analyze, Evaluate, Create)", String(hot), btotal > 0 ? Math.round((hot / btotal) * 100) + "%" : "0%"],
+        ["Total", String(btotal), "100%"],
+      ],
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [79, 70, 229] },
+      theme: "grid",
+    });
+
+    // ─── Comments ───
+    if (blueprint.comments.length > 0) {
+      y = getLastY() + 12;
+      if (y > doc.internal.pageSize.getHeight() - 50) { doc.addPage(); y = 20; }
+      doc.setFontSize(12);
+      doc.text("Review Comments", 14, y);
+      y += 5;
+      autoTable(doc, {
+        startY: y,
+        head: [["Reviewer", "Date", "Comment"]],
+        body: blueprint.comments.map((c) => [
+          c.admin.name,
+          new Date(c.createdAt).toLocaleString(),
+          c.content,
+        ]),
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [79, 70, 229] },
+        theme: "grid",
+      });
+    }
+
+    // ─── Footer ───
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(
+        `Assessment Blueprint Builder — Review PDF — Generated ${new Date().toLocaleDateString()} — Page ${i} of ${pageCount}`,
+        pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" }
+      );
     }
 
     doc.save(`review-${blueprint.course.code}-${blueprint.title.replace(/\s+/g, "_")}.pdf`);

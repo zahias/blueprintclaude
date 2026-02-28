@@ -14,12 +14,6 @@ export default function Home() {
             </div>
             <h1 className="text-xl font-bold text-gray-900">Assessment Blueprint Builder</h1>
           </div>
-          <Link
-            href="/admin/login"
-            className="text-sm text-gray-500 hover:text-gray-700 transition"
-          >
-            Admin Login
-          </Link>
         </div>
       </header>
 
