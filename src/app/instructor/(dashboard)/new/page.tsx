@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import TopicBuilder from "@/components/TopicBuilder";
 import QADashboard from "@/components/QADashboard";
-import HelpTooltip from "@/components/HelpTooltip";
 import { SEMESTERS, getAcademicYears } from "@/lib/constants";
 import type { BlueprintTopicEntry } from "@/lib/types";
 
@@ -61,9 +60,8 @@ export default function InstructorNewBlueprintPage() {
   const [topicEntries, setTopicEntries] = useState<BlueprintTopicEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [savedToken, setSavedToken] = useState<string | null>(null);
-  const [savedStatus, setSavedStatus] = useState<string | null>(null);
   const [instructorName, setInstructorName] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [showBanner, setShowBanner] = useState(true);
 
   const academicYears = getAcademicYears();
 
@@ -125,6 +123,13 @@ export default function InstructorNewBlueprintPage() {
     }),
   };
 
+  // Validation: all issues must be resolved before submit
+  const canSubmit = topicEntries.length > 0 && topicEntries.every((te) => {
+    const bloomSum = te.bloomRemember + te.bloomUnderstand + te.bloomApply + te.bloomAnalyze + te.bloomEvaluate + te.bloomCreate;
+    const qTypeSum = te.questionTypes.reduce((s, qt) => s + qt.count, 0);
+    return te.topicId && te.questionCount > 0 && bloomSum === te.questionCount && qTypeSum === te.questionCount;
+  }) && topicEntries.reduce((s, te) => s + te.totalPoints, 0) === (parseFloat(totalMarks) || 0);
+
   async function handleSave(status: "DRAFT" | "SUBMITTED") {
     setSaving(true);
     try {
@@ -161,7 +166,6 @@ export default function InstructorNewBlueprintPage() {
       if (res.ok) {
         const data = await res.json();
         setSavedToken(data.accessToken);
-        setSavedStatus(status);
         if (status === "SUBMITTED") {
           setStep("done");
         }
@@ -171,17 +175,9 @@ export default function InstructorNewBlueprintPage() {
     }
   }
 
-  function handleCopy() {
-    if (savedToken) {
-      navigator.clipboard.writeText(savedToken);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }
-
   // ─── Done screen ────────────────────────────────────────────────
 
-  if (step === "done" && savedToken) {
+  if (step === "done") {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="w-full max-w-md text-center bg-white rounded-xl border border-gray-200 p-8">
@@ -190,26 +186,17 @@ export default function InstructorNewBlueprintPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">
-            {savedStatus === "SUBMITTED" ? "Blueprint Submitted!" : "Draft Saved!"}
-          </h2>
-          <p className="text-gray-500 mb-4">
-            {savedStatus === "SUBMITTED"
-              ? "Your blueprint has been submitted for admin review."
-              : "Your draft has been saved. You can continue editing from your dashboard."}
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Blueprint Submitted!</h2>
+          <p className="text-gray-500 mb-6">
+            Your blueprint has been submitted for admin review. You can track its status from your dashboard.
           </p>
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <p className="text-xs text-gray-500 mb-1">Access Token (for sharing):</p>
-            <p className="font-mono text-xs text-gray-900 break-all select-all">{savedToken}</p>
-          </div>
           <div className="flex gap-2 justify-center">
-            <button onClick={handleCopy} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition">
-              {copied ? "Copied!" : "Copy Token"}
-            </button>
-            <button onClick={() => router.push(`/blueprint/${savedToken}`)} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition">
-              View Blueprint
-            </button>
-            <button onClick={() => router.push("/instructor")} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition">
+            {savedToken && (
+              <button onClick={() => router.push(`/blueprint/${savedToken}`)} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition">
+                View Blueprint
+              </button>
+            )}
+            <button onClick={() => router.push("/instructor")} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition">
               My Blueprints
             </button>
           </div>
@@ -306,25 +293,19 @@ export default function InstructorNewBlueprintPage() {
 
           <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Exam Title
-                <HelpTooltip text="A descriptive name for this exam, e.g. 'Midterm Exam', 'Final Exam', 'Quiz 3'." />
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Exam Title</label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="Midterm Exam"
+                placeholder="e.g. Midterm Exam, Final Exam, Quiz 3"
                 required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Semester
-                  <HelpTooltip text="The academic semester when this exam will be administered." />
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
                 <select
                   value={semester}
                   onChange={(e) => setSemester(e.target.value)}
@@ -337,10 +318,7 @@ export default function InstructorNewBlueprintPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Academic Year
-                  <HelpTooltip text="The academic year for this exam, e.g. 2025/2026." />
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
                 <select
                   value={academicYear}
                   onChange={(e) => setAcademicYear(e.target.value)}
@@ -365,10 +343,7 @@ export default function InstructorNewBlueprintPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration (min)
-                  <HelpTooltip text="How many minutes students will have to complete this exam." />
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
                 <input
                   type="number"
                   value={duration}
@@ -378,10 +353,7 @@ export default function InstructorNewBlueprintPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Marks
-                  <HelpTooltip text="The maximum marks/points for this entire exam. The sum of all topic points should match this number." />
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Total Marks</label>
                 <input
                   type="number"
                   value={totalMarks}
@@ -424,14 +396,7 @@ export default function InstructorNewBlueprintPage() {
             </div>
             <div className="flex gap-2 items-center">
               {savedToken && (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                    {savedStatus === "DRAFT" ? "Draft saved!" : "Saved!"}
-                  </span>
-                  <button onClick={handleCopy} className="text-xs text-gray-400 hover:text-indigo-600" title="Copy access token">
-                    {copied ? "Copied!" : "📋"}
-                  </button>
-                </div>
+                <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Draft saved</span>
               )}
               <button
                 onClick={() => handleSave("DRAFT")}
@@ -442,20 +407,34 @@ export default function InstructorNewBlueprintPage() {
               </button>
               <button
                 onClick={() => handleSave("SUBMITTED")}
-                disabled={saving || topicEntries.length === 0}
+                disabled={saving || !canSubmit}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition disabled:opacity-50"
+                title={!canSubmit ? "Resolve all issues in the QA dashboard before submitting" : ""}
               >
                 {saving ? "Submitting..." : "Submit for Review"}
               </button>
             </div>
           </div>
 
-          {/* Instructional banner */}
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 mb-6 text-sm text-indigo-700">
-            <strong>How it works:</strong> Add topics from your course, set the number of questions and points for each,
-            then distribute the questions across Bloom&apos;s taxonomy levels and question types.
-            The QA dashboard on the right updates live to show your assessment&apos;s balance and coverage.
-          </div>
+          {/* Instructional banner — dismissible */}
+          {showBanner && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 mb-6 text-sm text-indigo-700 flex items-start gap-3">
+              <div className="flex-1">
+                <strong>How it works:</strong> Add topics from your course, set the number of questions and points for each,
+                then distribute the questions across Bloom&apos;s taxonomy levels and question types.
+                The QA dashboard on the right updates live to show your assessment&apos;s balance and coverage.
+              </div>
+              <button
+                onClick={() => setShowBanner(false)}
+                className="text-indigo-400 hover:text-indigo-700 transition shrink-0 mt-0.5"
+                title="Dismiss"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             {/* Topic builder — takes 2/3 */}

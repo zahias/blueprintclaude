@@ -4,7 +4,6 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import TopicBuilder from "@/components/TopicBuilder";
 import QADashboard from "@/components/QADashboard";
-import HelpTooltip from "@/components/HelpTooltip";
 import { SEMESTERS, getAcademicYears, BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS } from "@/lib/constants";
 import type { BlueprintTopicEntry } from "@/lib/types";
 
@@ -47,7 +46,6 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const academicYears = getAcademicYears();
 
@@ -132,6 +130,13 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
     }),
   };
 
+  // Validation: all issues must be resolved before submit
+  const canSubmit = topicEntries.length > 0 && topicEntries.every((te) => {
+    const bloomSum = te.bloomRemember + te.bloomUnderstand + te.bloomApply + te.bloomAnalyze + te.bloomEvaluate + te.bloomCreate;
+    const qTypeSum = te.questionTypes.reduce((s, qt) => s + qt.count, 0);
+    return te.topicId && te.questionCount > 0 && bloomSum === te.questionCount && qTypeSum === te.questionCount;
+  }) && topicEntries.reduce((s, te) => s + te.totalPoints, 0) === (parseFloat(totalMarks) || 0);
+
   async function handleSave(newStatus: "DRAFT" | "SUBMITTED") {
     setSaving(true);
     try {
@@ -165,12 +170,6 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
     }
   }
 
-  function handleCopy() {
-    navigator.clipboard.writeText(token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
   if (loading) return <div className="text-gray-500">Loading blueprint...</div>;
 
   const canEdit = status === "DRAFT" || status === "REJECTED";
@@ -191,9 +190,6 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          <button onClick={handleCopy} className="text-xs text-gray-400 hover:text-indigo-600" title="Copy access token">
-            {copied ? "Copied!" : "📋 Token"}
-          </button>
           {saved && <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Saved!</span>}
           {canEdit && (
             <>
@@ -206,8 +202,9 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
               </button>
               <button
                 onClick={() => handleSave("SUBMITTED")}
-                disabled={saving || topicEntries.length === 0}
+                disabled={saving || !canSubmit}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition disabled:opacity-50"
+                title={!canSubmit ? "Resolve all issues in the QA dashboard before submitting" : ""}
               >
                 {saving ? "Submitting..." : "Submit for Review"}
               </button>
@@ -226,9 +223,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              Title <HelpTooltip text="A descriptive name for this exam." />
-            </label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Title</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -261,9 +256,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              Total Marks <HelpTooltip text="The maximum marks/points for this entire exam." />
-            </label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Total Marks</label>
             <input
               type="number"
               value={totalMarks}

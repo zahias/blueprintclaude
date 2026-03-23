@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useMemo, useState } from "react";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { BLOOM_LEVELS } from "@/lib/constants";
 import HelpTooltip from "@/components/HelpTooltip";
 
@@ -32,6 +32,8 @@ interface QADashboardProps {
 }
 
 export default function QADashboard({ blueprint }: QADashboardProps) {
+  const [showDetails, setShowDetails] = useState(false);
+
   const { bloomData, loData, loCoverage, totalQuestions, totalPoints, hotPercent, lotPercent } = useMemo(() => {
     const topics = blueprint.topics || [];
     const courseLOs = blueprint.course?.los || [];
@@ -90,29 +92,53 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
   }, [blueprint]);
 
   const pointsMismatch = totalPoints !== blueprint.totalMarks && totalPoints > 0;
+  const uncoveredLOs = loCoverage.filter((lo) => !lo.covered);
+  const hasWarnings = pointsMismatch || uncoveredLOs.length > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {/* Warnings banner — prominent at top */}
+      {hasWarnings && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-red-700 flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            Issues to resolve
+          </p>
+          {pointsMismatch && (
+            <p className="text-xs text-red-600">
+              • Points total ({totalPoints}) doesn&apos;t match exam total ({blueprint.totalMarks})
+            </p>
+          )}
+          {uncoveredLOs.length > 0 && (
+            <p className="text-xs text-red-600">
+              • {uncoveredLOs.length} learning outcome{uncoveredLOs.length > 1 ? "s" : ""} not assessed ({uncoveredLOs.map((lo) => lo.code).join(", ")})
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-400">Total Questions</p>
           <p className="text-2xl font-bold text-gray-900">{totalQuestions}</p>
         </div>
-        <div className={`rounded-xl border p-4 ${pointsMismatch ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
+        <div className={`rounded-xl border p-4 ${pointsMismatch ? "bg-amber-50 border-amber-300" : "bg-white border-gray-200"}`}>
           <p className="text-xs text-gray-400">Total Points</p>
           <p className={`text-2xl font-bold ${pointsMismatch ? "text-amber-700" : "text-gray-900"}`}>
             {totalPoints}
             <span className="text-sm font-normal text-gray-400"> / {blueprint.totalMarks}</span>
           </p>
-          {pointsMismatch && <p className="text-xs text-amber-600 mt-1">⚠️ Mismatch</p>}
+          {pointsMismatch && <p className="text-xs text-amber-600 font-medium mt-1">⚠ Doesn&apos;t match exam total</p>}
         </div>
       </div>
 
       {/* HOT/LOT bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center gap-1 mb-2">
-          <p className="text-xs text-gray-400">Cognitive Balance</p>
+          <p className="text-xs font-medium text-gray-500">Cognitive Balance</p>
           <HelpTooltip text="LOT (Lower-Order Thinking): Remember, Understand, Apply. HOT (Higher-Order Thinking): Analyze, Evaluate, Create. A good exam typically has 40-60% HOT questions." />
         </div>
         <div className="flex items-center gap-2 mb-1">
@@ -135,83 +161,91 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
         </div>
       </div>
 
-      {/* Bloom Pie Chart */}
-      {bloomData.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-1 mb-2">
-            <p className="text-xs text-gray-400">Bloom&apos;s Distribution</p>
-            <HelpTooltip text="Visual breakdown of questions across Bloom's taxonomy levels. A well-designed assessment typically covers multiple cognitive levels." />
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie
-                data={bloomData}
-                cx="50%"
-                cy="50%"
-                outerRadius={70}
-                innerRadius={40}
-                dataKey="value"
-                label={({ name, value }) => `${name}: ${value}`}
-                labelLine={false}
-              >
-                {bloomData.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* LO Points Bar Chart */}
-      {loData.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-1 mb-2">
-            <p className="text-xs text-gray-400">Points per Learning Outcome</p>
-            <HelpTooltip text="Shows how marks are distributed across learning outcomes. Points are split equally among LOs tied to each topic." />
-          </div>
-          <ResponsiveContainer width="100%" height={Math.max(150, loData.length * 35)}>
-            <BarChart data={loData} layout="vertical" margin={{ left: 10, right: 20 }}>
-              <XAxis type="number" tick={{ fontSize: 10 }} />
-              <YAxis type="category" dataKey="code" tick={{ fontSize: 10 }} width={40} />
-              <Tooltip />
-              <Bar dataKey="points" fill="#6366f1" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* LO Coverage Table */}
+      {/* LO Coverage — compact inline */}
       {loCoverage.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center gap-1 mb-2">
-            <p className="text-xs text-gray-400">Learning Outcome Coverage</p>
-            <HelpTooltip text="Shows which course learning outcomes (CLOs) are assessed by at least one topic. Uncovered LOs indicate gaps in assessment alignment." />
-          </div>
-          <div className="space-y-1.5">
+          <p className="text-xs font-medium text-gray-500 mb-2">Learning Outcome Coverage</p>
+          <div className="flex flex-wrap gap-1.5">
             {loCoverage.map((lo) => (
-              <div
+              <span
                 key={lo.code}
-                className={`flex items-start gap-2 px-3 py-2 rounded-lg text-sm ${
-                  lo.covered ? "bg-green-50" : "bg-red-50"
+                title={lo.description}
+                className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-1 rounded-md ${
+                  lo.covered
+                    ? "bg-green-100 text-green-700"
+                    : "bg-red-100 text-red-700"
                 }`}
               >
-                <span className={`mt-0.5 ${lo.covered ? "text-green-600" : "text-red-500"}`}>
-                  {lo.covered ? "✓" : "✗"}
-                </span>
-                <span className={`font-mono text-xs font-semibold ${lo.covered ? "text-green-700" : "text-red-700"}`}>
-                  {lo.code}
-                </span>
-                <span className="text-gray-600 text-xs flex-1">{lo.description}</span>
-                {lo.covered && <span className="text-xs text-gray-400">{lo.points} pts</span>}
-              </div>
+                {lo.covered ? "✓" : "✗"} {lo.code}
+                {lo.covered && lo.points > 0 && (
+                  <span className="text-green-500 font-sans text-[10px]">{lo.points}pt</span>
+                )}
+              </span>
             ))}
           </div>
-          {loCoverage.some((lo) => !lo.covered) && (
-            <p className="text-xs text-red-500 mt-2">
-              ⚠️ {loCoverage.filter((lo) => !lo.covered).length} learning outcome(s) not assessed.
-            </p>
+        </div>
+      )}
+
+      {/* Detailed Analytics — expandable */}
+      {(bloomData.length > 0 || loData.length > 0) && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowDetails(!showDetails)}
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-gray-400 hover:text-indigo-600 transition"
+          >
+            {showDetails ? "Hide" : "Show"} Detailed Charts
+            <svg
+              className={`w-3.5 h-3.5 transition-transform ${showDetails ? "rotate-180" : ""}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showDetails && (
+            <div className="space-y-3 mt-1">
+              {/* Bloom Pie Chart */}
+              {bloomData.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Bloom&apos;s Distribution</p>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={bloomData}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={70}
+                        innerRadius={40}
+                        dataKey="value"
+                        label={({ name, value }) => `${name}: ${value}`}
+                        labelLine={false}
+                      >
+                        {bloomData.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* LO Points Bar Chart */}
+              {loData.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Points per Learning Outcome</p>
+                  <ResponsiveContainer width="100%" height={Math.max(150, loData.length * 35)}>
+                    <BarChart data={loData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                      <XAxis type="number" tick={{ fontSize: 10 }} />
+                      <YAxis type="category" dataKey="code" tick={{ fontSize: 10 }} width={40} />
+                      <Tooltip />
+                      <Bar dataKey="points" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
