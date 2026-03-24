@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminFromCookies } from "@/lib/auth";
+import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
 
-// Admin: update blueprint status (approve/reject)
+// Coordinator: update blueprint status (approve/reject)
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const admin = await getAdminFromCookies();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const coordinator = await getCoordinatorFromCookies();
+  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { token } = await params;
   const { status } = await req.json();

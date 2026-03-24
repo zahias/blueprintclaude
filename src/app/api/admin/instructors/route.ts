@@ -11,10 +11,17 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     include: {
       _count: { select: { blueprints: true } },
+      majors: { select: { major: { select: { id: true, name: true } } } },
     },
   });
 
-  return NextResponse.json(instructors);
+  // Flatten majors for easier frontend consumption
+  const result = instructors.map((i) => ({
+    ...i,
+    assignedMajors: i.majors.map((im) => im.major),
+  }));
+
+  return NextResponse.json(result);
 }
 
 export async function POST(req: NextRequest) {

@@ -19,33 +19,55 @@ model Admin {
 }
 
 model Coordinator {
-  id           String          @id @default(uuid())
-  email        String          @unique
+  id           String              @id @default(uuid())
+  email        String              @unique
   passwordHash String
   name         String
-  isActive     Boolean         @default(true)
-  createdAt    DateTime        @default(now())
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
   comments     ReviewComment[]
+  majors       CoordinatorMajor[]
 }
 
 model Instructor {
-  id           String      @id @default(uuid())
-  email        String      @unique
+  id           String            @id @default(uuid())
+  email        String            @unique
   passwordHash String
   name         String
-  isActive     Boolean     @default(true)
-  createdAt    DateTime    @default(now())
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
   blueprints   Blueprint[]
+  majors       InstructorMajor[]
 }
 
 // ─── Academic Structure ─────────────────────────────────────────────────────────
 
 model Major {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  description String?
-  createdAt   DateTime @default(now())
-  courses     Course[]
+  id           String             @id @default(uuid())
+  name         String             @unique
+  description  String?
+  createdAt    DateTime           @default(now())
+  courses      Course[]
+  coordinators CoordinatorMajor[]
+  instructors  InstructorMajor[]
+}
+
+model CoordinatorMajor {
+  coordinatorId String
+  majorId       String
+  coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Cascade)
+  major         Major       @relation(fields: [majorId], references: [id], onDelete: Cascade)
+
+  @@id([coordinatorId, majorId])
+}
+
+model InstructorMajor {
+  instructorId String
+  majorId      String
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  major        Major      @relation(fields: [majorId], references: [id], onDelete: Cascade)
+
+  @@id([instructorId, majorId])
 }
 
 model Course {

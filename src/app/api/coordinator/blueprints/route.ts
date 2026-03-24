@@ -8,8 +8,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Scope to coordinator's assigned majors
+  const assignments = await prisma.coordinatorMajor.findMany({
+    where: { coordinatorId: coordinator.id },
+    select: { majorId: true },
+  });
+  const majorIds = assignments.map((a) => a.majorId);
+
   const blueprints = await prisma.blueprint.findMany({
-    where: { status: { in: ["SUBMITTED", "APPROVED", "REJECTED"] } },
+    where: {
+      status: { in: ["SUBMITTED", "APPROVED", "REJECTED"] },
+      course: { majorId: { in: majorIds } },
+    },
     orderBy: { updatedAt: "desc" },
     include: {
       course: { include: { major: { select: { name: true } } } },

@@ -82,7 +82,7 @@ export default function InstructorNewBlueprintPage() {
 
   // Load majors on mount
   useEffect(() => {
-    fetch("/api/majors").then((r) => r.json()).then(setMajors);
+    fetch("/api/instructor/majors").then((r) => r.json()).then(setMajors);
   }, []);
 
   // Load courses when major selected
@@ -188,7 +188,7 @@ export default function InstructorNewBlueprintPage() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Blueprint Submitted!</h2>
           <p className="text-gray-500 mb-6">
-            Your blueprint has been submitted for admin review. You can track its status from your dashboard.
+            Your blueprint has been submitted for coordinator review. You can track its status from your dashboard.
           </p>
           <div className="flex gap-2 justify-center">
             {savedToken && (
@@ -236,7 +236,7 @@ export default function InstructorNewBlueprintPage() {
           <h2 className="text-xl font-bold text-gray-900 mb-1">Select Major</h2>
           <p className="text-gray-500 mb-6">Choose the academic major for this exam blueprint.</p>
           {majors.length === 0 ? (
-            <p className="text-gray-400">No majors available. Ask your administrator to set them up.</p>
+            <p className="text-gray-400">No majors assigned. Ask your coordinator or administrator to assign you to a major.</p>
           ) : (
             <div className="space-y-2">
               {majors.map((m) => (

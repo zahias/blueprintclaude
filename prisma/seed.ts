@@ -136,6 +136,16 @@ async function main() {
   }
   console.log(`✅ ${topicData.length} Topics created and linked to LOs`);
 
+  // Assign coordinator to both majors
+  for (const major of [csMajor, bizMajor]) {
+    await prisma.coordinatorMajor.upsert({
+      where: { coordinatorId_majorId: { coordinatorId: coordinator.id, majorId: major.id } },
+      update: {},
+      create: { coordinatorId: coordinator.id, majorId: major.id },
+    });
+  }
+  console.log(`✅ Coordinator assigned to both majors`);
+
   console.log("\n🎉 Seed complete!");
 }
 

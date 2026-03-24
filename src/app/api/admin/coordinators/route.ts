@@ -17,8 +17,17 @@ export async function GET() {
         isActive: true,
         createdAt: true,
         _count: { select: { comments: true } },
+        majors: { select: { major: { select: { id: true, name: true } } } },
       },
     });
+
+    // Flatten majors for easier frontend consumption
+    const result = coordinators.map((c) => ({
+      ...c,
+      assignedMajors: c.majors.map((cm) => cm.major),
+    }));
+
+    return NextResponse.json(result);
 
     return NextResponse.json(coordinators);
   } catch (e) {

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminFromCookies } from "@/lib/auth";
+import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; loId: string }> }
 ) {
-  const admin = await getAdminFromCookies();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const coordinator = await getCoordinatorFromCookies();
+  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { loId } = await params;
   const { code, description } = await req.json();
@@ -23,8 +23,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; loId: string }> }
 ) {
-  const admin = await getAdminFromCookies();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const coordinator = await getCoordinatorFromCookies();
+  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { loId } = await params;
   await prisma.learningOutcome.delete({ where: { id: loId } });

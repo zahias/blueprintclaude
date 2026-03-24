@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminFromCookies } from "@/lib/auth";
+import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
 
 export async function GET(
   _req: NextRequest,
@@ -19,8 +19,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const admin = await getAdminFromCookies();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const coordinator = await getCoordinatorFromCookies();
+  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: courseId } = await params;
   const { name, description, sortOrder, loIds } = await req.json();

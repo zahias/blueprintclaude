@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminFromCookies } from "@/lib/auth";
+import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
 
 export async function GET(
   _req: NextRequest,
@@ -31,8 +31,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const admin = await getAdminFromCookies();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const coordinator = await getCoordinatorFromCookies();
+  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { token } = await params;
   const { content } = await req.json();
@@ -48,10 +48,10 @@ export async function POST(
   const comment = await prisma.reviewComment.create({
     data: {
       blueprintId: blueprint.id,
-      adminId: admin.id,
+      coordinatorId: coordinator.id,
       content,
     },
-    include: { admin: { select: { name: true } } },
+    include: { coordinator: { select: { name: true } } },
   });
 
   return NextResponse.json(comment, { status: 201 });
