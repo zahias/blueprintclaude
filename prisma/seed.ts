@@ -21,6 +21,19 @@ async function main() {
   });
   console.log(`✅ Admin created: ${admin.email} (password: admin123)`);
 
+  // Create default coordinator
+  const coordHash = await bcrypt.hash("coord123", 12);
+  const coordinator = await prisma.coordinator.upsert({
+    where: { email: "coordinator@blueprint.edu" },
+    update: {},
+    create: {
+      email: "coordinator@blueprint.edu",
+      passwordHash: coordHash,
+      name: "QA Coordinator",
+    },
+  });
+  console.log(`✅ Coordinator created: ${coordinator.email} (password: coord123)`);
+
   // Create sample major
   const csMajor = await prisma.major.upsert({
     where: { name: "Computer Science" },

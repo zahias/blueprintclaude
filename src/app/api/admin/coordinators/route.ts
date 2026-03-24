@@ -7,14 +7,19 @@ export async function GET() {
   const admin = await getAdminFromCookies();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const instructors = await prisma.instructor.findMany({
+  const coordinators = await prisma.coordinator.findMany({
     orderBy: { createdAt: "desc" },
-    include: {
-      _count: { select: { blueprints: true } },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      isActive: true,
+      createdAt: true,
+      _count: { select: { comments: true } },
     },
   });
 
-  return NextResponse.json(instructors);
+  return NextResponse.json(coordinators);
 }
 
 export async function POST(req: NextRequest) {
@@ -27,18 +32,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Email, password, and name are required" }, { status: 400 });
   }
 
-  const existing = await prisma.instructor.findUnique({ where: { email } });
+  const existing = await prisma.coordinator.findUnique({ where: { email } });
   if (existing) {
-    return NextResponse.json({ error: "An instructor with this email already exists" }, { status: 409 });
+    return NextResponse.json({ error: "A coordinator with this email already exists" }, { status: 409 });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const instructor = await prisma.instructor.create({
+  const coordinator = await prisma.coordinator.create({
     data: { email, passwordHash, name },
   });
 
   return NextResponse.json(
-    { id: instructor.id, email: instructor.email, name: instructor.name },
+    { id: coordinator.id, email: coordinator.email, name: coordinator.name },
     { status: 201 }
   );
 }

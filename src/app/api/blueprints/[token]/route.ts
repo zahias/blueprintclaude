@@ -30,7 +30,10 @@ export async function GET(
         },
       },
       comments: {
-        include: { admin: { select: { name: true } } },
+        include: {
+          admin: { select: { name: true } },
+          coordinator: { select: { name: true } },
+        },
         orderBy: { createdAt: "desc" },
       },
     },
@@ -61,7 +64,10 @@ export async function GET(
           },
         },
         comments: {
-          include: { admin: { select: { name: true } } },
+          include: {
+            admin: { select: { name: true } },
+            coordinator: { select: { name: true } },
+          },
           orderBy: { createdAt: "desc" },
         },
       },

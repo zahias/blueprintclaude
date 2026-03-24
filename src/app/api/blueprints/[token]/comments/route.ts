@@ -17,7 +17,10 @@ export async function GET(
 
   const comments = await prisma.reviewComment.findMany({
     where: { blueprintId: blueprint.id },
-    include: { admin: { select: { name: true } } },
+    include: {
+      admin: { select: { name: true } },
+      coordinator: { select: { name: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 

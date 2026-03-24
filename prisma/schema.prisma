@@ -18,6 +18,16 @@ model Admin {
   comments     ReviewComment[]
 }
 
+model Coordinator {
+  id           String          @id @default(uuid())
+  email        String          @unique
+  passwordHash String
+  name         String
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  comments     ReviewComment[]
+}
+
 model Instructor {
   id           String      @id @default(uuid())
   email        String      @unique
@@ -154,11 +164,13 @@ model BlueprintTopicQType {
 }
 
 model ReviewComment {
-  id          String    @id @default(uuid())
-  blueprintId String
-  blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
-  adminId     String
-  admin       Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  content     String
-  createdAt   DateTime  @default(now())
+  id            String       @id @default(uuid())
+  blueprintId   String
+  blueprint     Blueprint    @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  adminId       String?
+  admin         Admin?       @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  coordinatorId String?
+  coordinator   Coordinator? @relation(fields: [coordinatorId], references: [id], onDelete: Cascade)
+  content       String
+  createdAt     DateTime     @default(now())
 }

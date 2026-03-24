@@ -40,7 +40,7 @@ interface Blueprint {
     };
     questionTypes: { questionType: string; count: number }[];
   }[];
-  comments: { id: string; content: string; createdAt: string; admin: { name: string } }[];
+  comments: { id: string; content: string; createdAt: string; admin: { name: string } | null; coordinator: { name: string } | null }[];
 }
 
 export default function ReviewDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -224,7 +224,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
         startY: y,
         head: [["Reviewer", "Date", "Comment"]],
         body: blueprint.comments.map((c) => [
-          c.admin.name,
+          c.coordinator?.name || c.admin?.name || "Unknown",
           new Date(c.createdAt).toLocaleString(),
           c.content,
         ]),
@@ -391,7 +391,10 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
             {blueprint.comments.map((c) => (
               <div key={c.id} className="bg-gray-50 rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-sm text-gray-900">{c.admin.name}</span>
+                  <span className="font-medium text-sm text-gray-900">{c.coordinator?.name || c.admin?.name || "Unknown"}</span>
+                  <span className="text-xs text-gray-400">
+                    {c.coordinator ? "Coordinator" : c.admin ? "Admin" : ""}
+                  </span>
                   <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleString()}</span>
                 </div>
                 <p className="text-sm text-gray-700">{c.content}</p>
