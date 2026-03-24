@@ -43,21 +43,26 @@ export default function InstructorsPage() {
     setFormError("");
     setSaving(true);
 
-    const res = await fetch("/api/admin/instructors", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+    try {
+      const res = await fetch("/api/admin/instructors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
 
-    if (res.ok) {
-      setForm({ name: "", email: "", password: "" });
-      setShowForm(false);
-      load();
-    } else {
-      const data = await res.json();
-      setFormError(data.error || "Failed to create instructor");
+      if (res.ok) {
+        setForm({ name: "", email: "", password: "" });
+        setShowForm(false);
+        await load();
+      } else {
+        const data = await res.json();
+        setFormError(data.error || "Failed to create instructor");
+      }
+    } catch {
+      setFormError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   return (

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminFromCookies } from "@/lib/auth";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "@/lib/instructorAuth";
 
 export async function GET() {
   const admin = await getAdminFromCookies();
@@ -32,13 +32,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "An instructor with this email already exists" }, { status: 409 });
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
-  const instructor = await prisma.instructor.create({
-    data: { email, passwordHash, name },
-  });
+  try {
+    const passwordHash = await hashPassword(password);
+    const instructor = await prisma.instructor.create({
+      data: { email, passwordHash, name },
+    });
 
-  return NextResponse.json(
-    { id: instructor.id, email: instructor.email, name: instructor.name },
-    { status: 201 }
-  );
+    return NextResponse.json(
+      { id: instructor.id, email: instructor.email, name: instructor.name },
+      { status: 201 }
+    );
+  } catch (e) {
+    console.error("POST /api/admin/instructors error:", e);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

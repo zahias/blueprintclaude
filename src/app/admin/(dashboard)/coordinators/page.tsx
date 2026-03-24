@@ -43,21 +43,26 @@ export default function CoordinatorsPage() {
     setFormError("");
     setSaving(true);
 
-    const res = await fetch("/api/admin/coordinators", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+    try {
+      const res = await fetch("/api/admin/coordinators", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
 
-    if (res.ok) {
-      setForm({ name: "", email: "", password: "" });
-      setShowForm(false);
-      load();
-    } else {
-      const data = await res.json();
-      setFormError(data.error || "Failed to create coordinator");
+      if (res.ok) {
+        setForm({ name: "", email: "", password: "" });
+        setShowForm(false);
+        await load();
+      } else {
+        const data = await res.json();
+        setFormError(data.error || "Failed to create coordinator");
+      }
+    } catch {
+      setFormError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   return (
