@@ -45,6 +45,7 @@ function CollapsibleSection({
   title,
   badge,
   badgeColor,
+  remaining,
   defaultOpen = false,
   invalid = false,
   children,
@@ -52,6 +53,7 @@ function CollapsibleSection({
   title: string;
   badge: string;
   badgeColor: "green" | "red" | "gray";
+  remaining?: number;
   defaultOpen?: boolean;
   invalid?: boolean;
   children: React.ReactNode;
@@ -72,6 +74,11 @@ function CollapsibleSection({
       >
         <span className="text-xs font-medium text-gray-700">{title}</span>
         <div className="flex items-center gap-2">
+          {remaining !== undefined && remaining !== 0 && (
+            <span className={`text-[11px] font-medium ${remaining > 0 ? "text-amber-600" : "text-red-600"}`}>
+              {remaining > 0 ? `${remaining} left` : `${Math.abs(remaining)} over`}
+            </span>
+          )}
           <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${colors[badgeColor]}`}>
             {badge}
           </span>
@@ -89,20 +96,8 @@ function CollapsibleSection({
 }
 
 export default function TopicBuilder({ topics, entries, onChange }: TopicBuilderProps) {
-  // Track which question types are enabled per entry
-  const [enabledQTypes, setEnabledQTypes] = useState<Record<number, Set<string>>>(() => {
-    const initial: Record<number, Set<string>> = {};
-    entries.forEach((entry, i) => {
-      const enabled = new Set(entry.questionTypes.filter((qt) => qt.count > 0).map((qt) => qt.questionType));
-      initial[i] = enabled;
-    });
-    return initial;
-  });
-
   function addEntry() {
-    const newEntries = [...entries, emptyEntry()];
-    setEnabledQTypes((prev) => ({ ...prev, [newEntries.length - 1]: new Set<string>() }));
-    onChange(newEntries);
+    onChange([...entries, emptyEntry()]);
   }
 
   function updateEntry(index: number, partial: Partial<BlueprintTopicEntry>) {
@@ -112,33 +107,6 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
 
   function removeEntry(index: number) {
     onChange(entries.filter((_, i) => i !== index));
-    // Reindex enabled question types
-    setEnabledQTypes((prev) => {
-      const next: Record<number, Set<string>> = {};
-      let j = 0;
-      entries.forEach((_, i) => {
-        if (i !== index) {
-          next[j] = prev[i] || new Set();
-          j++;
-        }
-      });
-      return next;
-    });
-  }
-
-  function toggleQType(entryIndex: number, qType: string) {
-    const current = new Set(enabledQTypes[entryIndex] || []);
-    if (current.has(qType)) {
-      current.delete(qType);
-      // Also remove the count from entries
-      const entry = entries[entryIndex];
-      const filtered = entry.questionTypes.filter((qt) => qt.questionType !== qType);
-      const updated = entries.map((e, i) => (i === entryIndex ? { ...e, questionTypes: filtered } : e));
-      onChange(updated);
-    } else {
-      current.add(qType);
-    }
-    setEnabledQTypes((prev) => ({ ...prev, [entryIndex]: current }));
   }
 
   function updateQType(entryIndex: number, qType: string, count: number) {
@@ -192,7 +160,8 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
         const bloomValid = entry.questionCount === 0 || bloomSum === entry.questionCount;
         const qTypeValid = entry.questionCount === 0 || qTypeSum === entry.questionCount;
         const hasQuestions = entry.questionCount > 0;
-        const entryEnabledQTypes = enabledQTypes[index] || new Set();
+        const bloomRemaining = entry.questionCount - bloomSum;
+        const qTypeRemaining = entry.questionCount - qTypeSum;
 
         return (
           <div key={index} className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -274,6 +243,7 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
                 title="Bloom's Distribution"
                 badge={hasQuestions ? `${bloomSum}/${entry.questionCount}` : "—"}
                 badgeColor={!hasQuestions ? "gray" : bloomValid ? "green" : "red"}
+                remaining={hasQuestions ? bloomRemaining : undefined}
                 defaultOpen={hasQuestions && !bloomValid}
                 invalid={hasQuestions && !bloomValid}
               >
@@ -292,7 +262,10 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
                       const val = entry[key] as number;
                       return (
                         <div key={bloom.key} className="relative">
-                          <label className="block text-[11px] font-medium text-gray-600 mb-1">{bloom.label}</label>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-1 flex items-center gap-1">
+                            {bloom.label}
+                            <HelpTooltip text={bloom.description} />
+                          </label>
                           <input
                             type="number"
                             min={0}
@@ -324,7 +297,10 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
                       const val = entry[key] as number;
                       return (
                         <div key={bloom.key} className="relative">
-                          <label className="block text-[11px] font-medium text-gray-600 mb-1">{bloom.label}</label>
+                          <label className="block text-[11px] font-medium text-gray-600 mb-1 flex items-center gap-1">
+                            {bloom.label}
+                            <HelpTooltip text={bloom.description} />
+                          </label>
                           <input
                             type="number"
                             min={0}
@@ -351,60 +327,35 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
                 title="Question Types"
                 badge={hasQuestions ? `${qTypeSum}/${entry.questionCount}` : "—"}
                 badgeColor={!hasQuestions ? "gray" : qTypeValid ? "green" : "red"}
+                remaining={hasQuestions ? qTypeRemaining : undefined}
                 defaultOpen={hasQuestions && !qTypeValid}
                 invalid={hasQuestions && !qTypeValid}
               >
                 <p className="text-[11px] text-gray-400 mb-3">
-                  Select which types apply, then set counts. Total must equal {entry.questionCount || "# of questions"}.
+                  Set the number of questions for each type. Total must equal {entry.questionCount || "# of questions"}.
                 </p>
 
-                {/* Checkbox chips row */}
-                <div className="flex flex-wrap gap-2 mb-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {QUESTION_TYPES.map((qt) => {
-                    const isActive = entryEnabledQTypes.has(qt.value);
+                    const existing = entry.questionTypes.find((x) => x.questionType === qt.value);
                     return (
-                      <button
-                        key={qt.value}
-                        type="button"
-                        onClick={() => toggleQType(index, qt.value)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
-                          isActive
-                            ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-                            : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
-                        }`}
-                      >
-                        {isActive && <span className="mr-1">✓</span>}
-                        {qt.label}
-                      </button>
+                      <div key={qt.value} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                        <label className="text-xs text-gray-600 flex-1 flex items-center gap-1">
+                          {qt.label}
+                          <HelpTooltip text={qt.description} />
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={existing?.count || ""}
+                          onChange={(e) => updateQType(index, qt.value, parseInt(e.target.value) || 0)}
+                          className="w-14 px-2 py-1 border border-gray-300 rounded text-xs text-center focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                          placeholder="0"
+                        />
+                      </div>
                     );
                   })}
                 </div>
-
-                {/* Count inputs — only for enabled types */}
-                {Array.from(entryEnabledQTypes).length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {QUESTION_TYPES.filter((qt) => entryEnabledQTypes.has(qt.value)).map((qt) => {
-                      const existing = entry.questionTypes.find((x) => x.questionType === qt.value);
-                      return (
-                        <div key={qt.value} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                          <label className="text-xs text-gray-600 flex-1">{qt.label}</label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={existing?.count || ""}
-                            onChange={(e) => updateQType(index, qt.value, parseInt(e.target.value) || 0)}
-                            className="w-14 px-2 py-1 border border-gray-300 rounded text-xs text-center focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                            placeholder="0"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {Array.from(entryEnabledQTypes).length === 0 && (
-                  <p className="text-[11px] text-gray-400 italic">Click a type above to get started</p>
-                )}
               </CollapsibleSection>
             </div>
           </div>

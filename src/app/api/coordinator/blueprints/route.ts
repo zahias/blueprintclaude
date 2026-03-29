@@ -17,7 +17,7 @@ export async function GET() {
 
   const blueprints = await prisma.blueprint.findMany({
     where: {
-      status: { in: ["SUBMITTED", "APPROVED", "REJECTED"] },
+      status: { in: ["SUBMITTED", "APPROVED", "NEEDS_REVISION"] },
       course: { majorId: { in: majorIds } },
     },
     orderBy: { updatedAt: "desc" },

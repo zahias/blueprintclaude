@@ -65,7 +65,7 @@ export default function ReviewsPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="flex gap-1">
-          {["", "SUBMITTED", "APPROVED", "REJECTED", "DRAFT"].map((s) => (
+          {["", "SUBMITTED", "APPROVED", "NEEDS_REVISION", "DRAFT"].map((s) => (
             <button
               key={s}
               onClick={() => { setStatusFilter(s); setLoading(true); }}

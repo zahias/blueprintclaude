@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
+import { notifyBlueprintStatusChange } from "@/lib/email";
 
 export async function GET(
   _req: NextRequest,
@@ -55,8 +56,8 @@ export async function POST(
   const { id } = await params;
   const { status } = await req.json();
 
-  if (!["APPROVED", "REJECTED"].includes(status)) {
-    return NextResponse.json({ error: "Status must be APPROVED or REJECTED" }, { status: 400 });
+  if (!["APPROVED", "NEEDS_REVISION"].includes(status)) {
+    return NextResponse.json({ error: "Status must be APPROVED or NEEDS_REVISION" }, { status: 400 });
   }
 
   const blueprint = await prisma.blueprint.findUnique({ where: { id } });
@@ -66,6 +67,8 @@ export async function POST(
     where: { id },
     data: { status },
   });
+
+  notifyBlueprintStatusChange(id, status);
 
   return NextResponse.json(updated);
 }

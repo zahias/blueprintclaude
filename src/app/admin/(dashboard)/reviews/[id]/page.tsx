@@ -61,7 +61,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     loadBlueprint();
   }, [loadBlueprint]);
 
-  async function handleReview(status: "APPROVED" | "REJECTED") {
+  async function handleReview(status: "APPROVED" | "NEEDS_REVISION") {
     setSubmitting(true);
     await fetch(`/api/blueprints/${id}/review`, {
       method: "POST",
@@ -118,7 +118,7 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
     // Status with color
     doc.setFontSize(12);
     const statusColors: Record<string, [number, number, number]> = {
-      APPROVED: [22, 163, 74], REJECTED: [220, 38, 38], SUBMITTED: [37, 99, 235], DRAFT: [107, 114, 128],
+      APPROVED: [22, 163, 74], NEEDS_REVISION: [245, 158, 11], SUBMITTED: [37, 99, 235], DRAFT: [107, 114, 128],
     };
     const sc = statusColors[blueprint.status] || [0, 0, 0];
     doc.setTextColor(sc[0], sc[1], sc[2]);
@@ -297,11 +297,11 @@ export default function ReviewDetailPage({ params }: { params: Promise<{ id: str
                 Approve
               </button>
               <button
-                onClick={() => handleReview("REJECTED")}
+                onClick={() => handleReview("NEEDS_REVISION")}
                 disabled={submitting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium disabled:opacity-50"
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition text-sm font-medium disabled:opacity-50"
               >
-                Reject
+                Needs Revision
               </button>
             </>
           )}

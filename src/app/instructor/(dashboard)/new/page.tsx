@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import TopicBuilder from "@/components/TopicBuilder";
 import QADashboard from "@/components/QADashboard";
 import { SEMESTERS, getAcademicYears } from "@/lib/constants";
-import type { BlueprintTopicEntry } from "@/lib/types";
+import { type BlueprintTopicEntry, getSubmitIssues } from "@/lib/types";
 
 interface Major {
   id: string;
@@ -62,6 +62,9 @@ export default function InstructorNewBlueprintPage() {
   const [savedToken, setSavedToken] = useState<string | null>(null);
   const [instructorName, setInstructorName] = useState("");
   const [showBanner, setShowBanner] = useState(true);
+  const [autoSaved, setAutoSaved] = useState(false);
+  const [showMobileQA, setShowMobileQA] = useState(false);
+  const dirtyRef = useRef(false);
 
   const academicYears = getAcademicYears();
 
@@ -123,14 +126,13 @@ export default function InstructorNewBlueprintPage() {
     }),
   };
 
-  // Validation: all issues must be resolved before submit
-  const canSubmit = topicEntries.length > 0 && topicEntries.every((te) => {
-    const bloomSum = te.bloomRemember + te.bloomUnderstand + te.bloomApply + te.bloomAnalyze + te.bloomEvaluate + te.bloomCreate;
-    const qTypeSum = te.questionTypes.reduce((s, qt) => s + qt.count, 0);
-    return te.topicId && te.questionCount > 0 && bloomSum === te.questionCount && qTypeSum === te.questionCount;
-  }) && topicEntries.reduce((s, te) => s + te.totalPoints, 0) === (parseFloat(totalMarks) || 0);
+  // Validation
+  const examTotalCalc = parseFloat(totalMarks) || 0;
+  const totalPointsCalc = topicEntries.reduce((s, te) => s + te.totalPoints, 0);
+  const submitIssues = getSubmitIssues(topicEntries, topics, examTotalCalc);
+  const canSubmit = submitIssues.length === 0;
 
-  async function handleSave(status: "DRAFT" | "SUBMITTED") {
+  const handleSave = useCallback(async (status: "DRAFT" | "SUBMITTED") => {
     setSaving(true);
     try {
       const payload = {
@@ -148,14 +150,12 @@ export default function InstructorNewBlueprintPage() {
 
       let res;
       if (savedToken) {
-        // Update existing draft
         res = await fetch(`/api/blueprints/${savedToken}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
       } else {
-        // Create new
         res = await fetch("/api/blueprints", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -166,6 +166,7 @@ export default function InstructorNewBlueprintPage() {
       if (res.ok) {
         const data = await res.json();
         setSavedToken(data.accessToken);
+        dirtyRef.current = false;
         if (status === "SUBMITTED") {
           setStep("done");
         }
@@ -173,7 +174,22 @@ export default function InstructorNewBlueprintPage() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [selectedCourseId, instructorName, title, examDate, duration, totalMarks, semester, academicYear, topicEntries, savedToken]);
+
+  // Auto-save every 30s when dirty (only after first manual save)
+  useEffect(() => {
+    if (!savedToken) return;
+    const id = setInterval(() => {
+      if (dirtyRef.current) {
+        dirtyRef.current = false;
+        handleSave("DRAFT").then(() => {
+          setAutoSaved(true);
+          setTimeout(() => setAutoSaved(false), 2000);
+        });
+      }
+    }, 30000);
+    return () => clearInterval(id);
+  }, [savedToken, handleSave]);
 
   // ─── Done screen ────────────────────────────────────────────────
 
@@ -343,14 +359,17 @@ export default function InstructorNewBlueprintPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
-                <input
-                  type="number"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="90"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    className="w-full px-3 py-2 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="90"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">min</span>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Total Marks</label>
@@ -395,9 +414,13 @@ export default function InstructorNewBlueprintPage() {
               </p>
             </div>
             <div className="flex gap-2 items-center">
+              <span className={`text-sm font-medium ${totalPointsCalc === examTotalCalc ? "text-green-600" : "text-amber-600"}`}>
+                {totalPointsCalc} / {examTotalCalc} pts
+              </span>
               {savedToken && (
                 <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Draft saved</span>
               )}
+              {autoSaved && <span className="text-xs text-gray-400">Auto-saved</span>}
               <button
                 onClick={() => handleSave("DRAFT")}
                 disabled={saving || topicEntries.length === 0}
@@ -409,12 +432,22 @@ export default function InstructorNewBlueprintPage() {
                 onClick={() => handleSave("SUBMITTED")}
                 disabled={saving || !canSubmit}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition disabled:opacity-50"
-                title={!canSubmit ? "Resolve all issues in the QA dashboard before submitting" : ""}
+                title={!canSubmit ? "Resolve all issues below before submitting" : ""}
               >
                 {saving ? "Submitting..." : "Submit for Review"}
               </button>
             </div>
           </div>
+
+          {/* Submit checklist */}
+          {!canSubmit && topicEntries.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
+              <p className="text-sm font-medium text-amber-800 mb-2">Fix these issues to submit:</p>
+              <ul className="list-disc list-inside text-sm text-amber-700 space-y-0.5">
+                {submitIssues.map((issue, i) => <li key={i}>{issue}</li>)}
+              </ul>
+            </div>
+          )}
 
           {/* Instructional banner — dismissible */}
           {showBanner && (
@@ -437,22 +470,51 @@ export default function InstructorNewBlueprintPage() {
           )}
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            {/* Topic builder — takes 2/3 */}
             <div className="xl:col-span-2">
               <TopicBuilder
                 topics={topics}
                 entries={topicEntries}
-                onChange={setTopicEntries}
+                onChange={(entries) => { setTopicEntries(entries); dirtyRef.current = true; }}
               />
             </div>
-
-            {/* QA Dashboard — takes 1/3 */}
             <div className="xl:col-span-1">
-              <div className="sticky top-20">
+              <div className="sticky top-20 hidden xl:block">
                 <QADashboard blueprint={blueprintForQA} />
               </div>
             </div>
           </div>
+
+          {/* Mobile QA floating button */}
+          <button
+            onClick={() => setShowMobileQA(true)}
+            className="fixed bottom-4 right-4 xl:hidden bg-indigo-600 text-white rounded-full w-12 h-12 shadow-lg flex items-center justify-center z-40 hover:bg-indigo-700 transition"
+          >
+            {!canSubmit && topicEntries.length > 0 ? (
+              <span className="text-sm font-bold">{submitIssues.length}</span>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            )}
+          </button>
+
+          {/* Mobile QA slide-over */}
+          {showMobileQA && (
+            <div className="fixed inset-0 z-50 xl:hidden">
+              <div className="absolute inset-0 bg-black/30" onClick={() => setShowMobileQA(false)} />
+              <div className="absolute right-0 top-0 bottom-0 w-80 bg-white shadow-xl p-4 overflow-y-auto">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900">QA Dashboard</h3>
+                  <button onClick={() => setShowMobileQA(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <QADashboard blueprint={blueprintForQA} />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

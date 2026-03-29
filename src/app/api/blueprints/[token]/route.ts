@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminFromCookies } from "@/lib/auth";
+import { notifyBlueprintStatusChange } from "@/lib/email";
 
 // Fetch blueprint by accessToken (public) or by id (admin)
 export async function GET(
@@ -94,8 +95,16 @@ export async function PUT(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Only allow editing DRAFT or REJECTED blueprints
-  if (existing.status !== "DRAFT" && existing.status !== "REJECTED") {
+  // Only allow editing DRAFT or NEEDS_REVISION blueprints
+  // Also allow withdrawing a SUBMITTED blueprint back to DRAFT
+  if (body.status === "DRAFT" && existing.status === "SUBMITTED") {
+    const updated = await prisma.blueprint.update({
+      where: { id: existing.id },
+      data: { status: "DRAFT" },
+    });
+    return NextResponse.json(updated);
+  }
+  if (existing.status !== "DRAFT" && existing.status !== "NEEDS_REVISION") {
     const admin = await getAdminFromCookies();
     if (!admin) {
       return NextResponse.json(
@@ -164,6 +173,8 @@ export async function PUT(
       topics: { include: { questionTypes: true, topic: true } },
     },
   });
+
+  if (status === "SUBMITTED") notifyBlueprintStatusChange(blueprint.id, "SUBMITTED");
 
   return NextResponse.json(blueprint);
 }

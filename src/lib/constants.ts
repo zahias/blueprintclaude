@@ -35,12 +35,12 @@ export const BLUEPRINT_STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",
   APPROVED: "Approved",
-  REJECTED: "Rejected",
+  NEEDS_REVISION: "Needs Revision",
 };
 
 export const BLUEPRINT_STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
   SUBMITTED: "bg-blue-100 text-blue-700",
   APPROVED: "bg-green-100 text-green-700",
-  REJECTED: "bg-red-100 text-red-700",
+  NEEDS_REVISION: "bg-amber-100 text-amber-700",
 };

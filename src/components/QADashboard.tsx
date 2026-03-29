@@ -91,33 +91,8 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
     return { bloomData, loData, loCoverage, totalQuestions, totalPoints, hotPercent, lotPercent };
   }, [blueprint]);
 
-  const pointsMismatch = totalPoints !== blueprint.totalMarks && totalPoints > 0;
-  const uncoveredLOs = loCoverage.filter((lo) => !lo.covered);
-  const hasWarnings = pointsMismatch || uncoveredLOs.length > 0;
-
   return (
     <div className="space-y-3">
-      {/* Warnings banner — prominent at top */}
-      {hasWarnings && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1.5">
-          <p className="text-xs font-semibold text-red-700 flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-            Issues to resolve
-          </p>
-          {pointsMismatch && (
-            <p className="text-xs text-red-600">
-              • Points total ({totalPoints}) doesn&apos;t match exam total ({blueprint.totalMarks})
-            </p>
-          )}
-          {uncoveredLOs.length > 0 && (
-            <p className="text-xs text-red-600">
-              • {uncoveredLOs.length} learning outcome{uncoveredLOs.length > 1 ? "s" : ""} not assessed ({uncoveredLOs.map((lo) => lo.code).join(", ")})
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3">
@@ -125,13 +100,12 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
           <p className="text-xs text-gray-400">Total Questions</p>
           <p className="text-2xl font-bold text-gray-900">{totalQuestions}</p>
         </div>
-        <div className={`rounded-xl border p-4 ${pointsMismatch ? "bg-amber-50 border-amber-300" : "bg-white border-gray-200"}`}>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-400">Total Points</p>
-          <p className={`text-2xl font-bold ${pointsMismatch ? "text-amber-700" : "text-gray-900"}`}>
+          <p className="text-2xl font-bold text-gray-900">
             {totalPoints}
             <span className="text-sm font-normal text-gray-400"> / {blueprint.totalMarks}</span>
           </p>
-          {pointsMismatch && <p className="text-xs text-amber-600 font-medium mt-1">⚠ Doesn&apos;t match exam total</p>}
         </div>
       </div>
 

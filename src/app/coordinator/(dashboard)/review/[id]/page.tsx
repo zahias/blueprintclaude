@@ -65,7 +65,14 @@ export default function CoordinatorReviewPage({ params }: { params: Promise<{ id
     loadBlueprint();
   }, [loadBlueprint]);
 
-  async function handleReview(status: "APPROVED" | "REJECTED") {
+  const [revisionError, setRevisionError] = useState("");
+
+  async function handleReview(status: "APPROVED" | "NEEDS_REVISION") {
+    if (status === "NEEDS_REVISION" && (!blueprint || blueprint.comments.length === 0)) {
+      setRevisionError("Please add a comment explaining what needs to be changed before requesting revision.");
+      return;
+    }
+    setRevisionError("");
     setSubmitting(true);
     await fetch(`/api/coordinator/blueprints/${id}`, {
       method: "POST",
@@ -131,13 +138,16 @@ export default function CoordinatorReviewPage({ params }: { params: Promise<{ id
                 Approve
               </button>
               <button
-                onClick={() => handleReview("REJECTED")}
+                onClick={() => handleReview("NEEDS_REVISION")}
                 disabled={submitting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium disabled:opacity-50"
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition text-sm font-medium disabled:opacity-50"
               >
-                Reject
+                Needs Revision
               </button>
             </>
+          )}
+          {revisionError && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{revisionError}</p>
           )}
         </div>
       </div>

@@ -28,8 +28,6 @@ export async function GET() {
     }));
 
     return NextResponse.json(result);
-
-    return NextResponse.json(coordinators);
   } catch (e) {
     console.error("GET /api/admin/coordinators error:", e);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import TopicBuilder from "@/components/TopicBuilder";
 import QADashboard from "@/components/QADashboard";
 import { SEMESTERS, getAcademicYears, BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS } from "@/lib/constants";
-import type { BlueprintTopicEntry } from "@/lib/types";
+import { type BlueprintTopicEntry, getSubmitIssues } from "@/lib/types";
+
+interface Comment {
+  id: string;
+  content: string;
+  createdAt: string;
+  admin?: { name: string } | null;
+  coordinator?: { name: string } | null;
+}
 
 interface LO {
   id: string;
@@ -46,6 +54,10 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [autoSaved, setAutoSaved] = useState(false);
+  const [showMobileQA, setShowMobileQA] = useState(false);
+  const dirtyRef = useRef(false);
 
   const academicYears = getAcademicYears();
 
@@ -68,6 +80,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
       setInstructorName(bp.instructorName);
       setStatus(bp.status);
       setCourseId(bp.courseId);
+      setComments(bp.comments || []);
 
       // Load course topics and LOs
       const [topicsRes, losRes] = await Promise.all([
@@ -130,14 +143,13 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
     }),
   };
 
-  // Validation: all issues must be resolved before submit
-  const canSubmit = topicEntries.length > 0 && topicEntries.every((te) => {
-    const bloomSum = te.bloomRemember + te.bloomUnderstand + te.bloomApply + te.bloomAnalyze + te.bloomEvaluate + te.bloomCreate;
-    const qTypeSum = te.questionTypes.reduce((s, qt) => s + qt.count, 0);
-    return te.topicId && te.questionCount > 0 && bloomSum === te.questionCount && qTypeSum === te.questionCount;
-  }) && topicEntries.reduce((s, te) => s + te.totalPoints, 0) === (parseFloat(totalMarks) || 0);
+  // Validation
+  const totalPointsCalc = topicEntries.reduce((s, te) => s + te.totalPoints, 0);
+  const examTotalCalc = parseFloat(totalMarks) || 0;
+  const submitIssues = getSubmitIssues(topicEntries, topics, examTotalCalc);
+  const canSubmit = submitIssues.length === 0;
 
-  async function handleSave(newStatus: "DRAFT" | "SUBMITTED") {
+  const handleSave = useCallback(async (newStatus: "DRAFT" | "SUBMITTED") => {
     setSaving(true);
     try {
       const res = await fetch(`/api/blueprints/${token}`, {
@@ -158,6 +170,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
       });
 
       if (res.ok) {
+        dirtyRef.current = false;
         setSaved(true);
         setStatus(newStatus);
         setTimeout(() => setSaved(false), 3000);
@@ -168,11 +181,24 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
     } finally {
       setSaving(false);
     }
-  }
+  }, [token, courseId, instructorName, title, examDate, duration, totalMarks, semester, academicYear, topicEntries, router]);
+
+  // Auto-save every 30 seconds when dirty + editable
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (dirtyRef.current && !saving && (status === "DRAFT" || status === "NEEDS_REVISION")) {
+        handleSave("DRAFT").then(() => {
+          setAutoSaved(true);
+          setTimeout(() => setAutoSaved(false), 2000);
+        });
+      }
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [saving, status, handleSave]);
 
   if (loading) return <div className="text-gray-500">Loading blueprint...</div>;
 
-  const canEdit = status === "DRAFT" || status === "REJECTED";
+  const canEdit = status === "DRAFT" || status === "NEEDS_REVISION";
 
   return (
     <div>
@@ -190,7 +216,11 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
           </div>
         </div>
         <div className="flex gap-2 items-center">
+          <span className={`text-sm font-medium ${totalPointsCalc === examTotalCalc ? "text-green-600" : "text-amber-600"}`}>
+            {totalPointsCalc} / {examTotalCalc} pts
+          </span>
           {saved && <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Saved!</span>}
+          {autoSaved && <span className="text-xs text-gray-400">Auto-saved</span>}
           {canEdit && (
             <>
               <button
@@ -204,7 +234,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
                 onClick={() => handleSave("SUBMITTED")}
                 disabled={saving || !canSubmit}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition disabled:opacity-50"
-                title={!canSubmit ? "Resolve all issues in the QA dashboard before submitting" : ""}
+                title={!canSubmit ? "Resolve all issues below before submitting" : ""}
               >
                 {saving ? "Submitting..." : "Submit for Review"}
               </button>
@@ -213,9 +243,37 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
         </div>
       </div>
 
+      {/* Submit checklist — shown when there are issues */}
+      {canEdit && !canSubmit && topicEntries.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
+          <p className="text-sm font-medium text-amber-800 mb-2">Fix these issues to submit:</p>
+          <ul className="list-disc list-inside text-sm text-amber-700 space-y-0.5">
+            {submitIssues.map((issue, i) => <li key={i}>{issue}</li>)}
+          </ul>
+        </div>
+      )}
+
       {!canEdit && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6 text-sm text-amber-700">
-          This blueprint is currently <strong>{status.toLowerCase()}</strong> and cannot be edited.
+          This blueprint is currently <strong>{(BLUEPRINT_STATUS_LABELS[status] || status).toLowerCase()}</strong> and cannot be edited.
+        </div>
+      )}
+
+      {/* Reviewer comments */}
+      {comments.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Reviewer Comments</h3>
+          <div className="space-y-2">
+            {comments.map((c) => (
+              <div key={c.id} className="bg-white rounded-lg px-3 py-2 border border-gray-100">
+                <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+                  <span className="font-medium">{c.coordinator?.name || c.admin?.name || "Reviewer"}</span>
+                  <span>{new Date(c.createdAt).toLocaleDateString()}</span>
+                </div>
+                <p className="text-sm text-gray-800">{c.content}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -226,7 +284,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             <label className="block text-xs font-medium text-gray-500 mb-1">Title</label>
             <input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); dirtyRef.current = true; }}
               disabled={!canEdit}
               className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
             />
@@ -235,7 +293,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             <label className="block text-xs font-medium text-gray-500 mb-1">Semester</label>
             <select
               value={semester}
-              onChange={(e) => setSemester(e.target.value)}
+              onChange={(e) => { setSemester(e.target.value); dirtyRef.current = true; }}
               disabled={!canEdit}
               className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
             >
@@ -247,7 +305,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
             <select
               value={academicYear}
-              onChange={(e) => setAcademicYear(e.target.value)}
+              onChange={(e) => { setAcademicYear(e.target.value); dirtyRef.current = true; }}
               disabled={!canEdit}
               className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
             >
@@ -260,20 +318,23 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             <input
               type="number"
               value={totalMarks}
-              onChange={(e) => setTotalMarks(e.target.value)}
+              onChange={(e) => { setTotalMarks(e.target.value); dirtyRef.current = true; }}
               disabled={!canEdit}
               className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Duration (min)</label>
-            <input
-              type="number"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              disabled={!canEdit}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
-            />
+            <label className="block text-xs font-medium text-gray-500 mb-1">Duration</label>
+            <div className="relative">
+              <input
+                type="number"
+                value={duration}
+                onChange={(e) => { setDuration(e.target.value); dirtyRef.current = true; }}
+                disabled={!canEdit}
+                className="w-full px-2 py-1.5 pr-10 border border-gray-300 rounded text-sm disabled:bg-gray-50"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">min</span>
+            </div>
           </div>
         </div>
       </div>
@@ -281,19 +342,51 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2">
           {canEdit ? (
-            <TopicBuilder topics={topics} entries={topicEntries} onChange={setTopicEntries} />
+            <TopicBuilder topics={topics} entries={topicEntries} onChange={(entries) => { setTopicEntries(entries); dirtyRef.current = true; }} />
           ) : (
             <div className="bg-white rounded-xl border border-gray-200 p-6 text-gray-500 text-sm">
-              Topic editing is disabled for {status.toLowerCase()} blueprints.
+              Topic editing is disabled for {(BLUEPRINT_STATUS_LABELS[status] || status).toLowerCase()} blueprints.
             </div>
           )}
         </div>
         <div className="xl:col-span-1">
-          <div className="sticky top-20">
+          <div className="sticky top-20 hidden xl:block">
             <QADashboard blueprint={blueprintForQA} />
           </div>
         </div>
       </div>
+
+      {/* Mobile QA floating button */}
+      <button
+        onClick={() => setShowMobileQA(true)}
+        className="fixed bottom-4 right-4 xl:hidden bg-indigo-600 text-white rounded-full w-12 h-12 shadow-lg flex items-center justify-center z-40 hover:bg-indigo-700 transition"
+      >
+        {!canSubmit && topicEntries.length > 0 ? (
+          <span className="text-sm font-bold">{submitIssues.length}</span>
+        ) : (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        )}
+      </button>
+
+      {/* Mobile QA slide-over */}
+      {showMobileQA && (
+        <div className="fixed inset-0 z-50 xl:hidden">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowMobileQA(false)} />
+          <div className="absolute right-0 top-0 bottom-0 w-80 bg-white shadow-xl p-4 overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">QA Dashboard</h3>
+              <button onClick={() => setShowMobileQA(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <QADashboard blueprint={blueprintForQA} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

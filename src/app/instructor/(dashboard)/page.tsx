@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS, SEMESTERS, getAcademicYears } from "@/lib/constants";
 
 interface Blueprint {
@@ -24,12 +25,23 @@ interface Blueprint {
 }
 
 export default function InstructorDashboard() {
+  const router = useRouter();
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [semesterFilter, setSemesterFilter] = useState("");
-  const [yearFilter, setYearFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(() => {
+    if (typeof window !== "undefined") return sessionStorage.getItem("bp_status") || "";
+    return "";
+  });
+  const [semesterFilter, setSemesterFilter] = useState(() => {
+    if (typeof window !== "undefined") return sessionStorage.getItem("bp_semester") || "";
+    return "";
+  });
+  const [yearFilter, setYearFilter] = useState(() => {
+    if (typeof window !== "undefined") return sessionStorage.getItem("bp_year") || "";
+    return "";
+  });
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const academicYears = getAcademicYears();
 
@@ -46,14 +58,75 @@ export default function InstructorDashboard() {
 
   useEffect(() => {
     setLoading(true);
+    sessionStorage.setItem("bp_status", statusFilter);
+    sessionStorage.setItem("bp_semester", semesterFilter);
+    sessionStorage.setItem("bp_year", yearFilter);
     loadBlueprints();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, semesterFilter, yearFilter]);
 
   function copyToken(token: string, id: string) {
-    navigator.clipboard.writeText(token);
+    navigator.clipboard.writeText(`${window.location.origin}/blueprint/${token}`);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  async function handleWithdraw(bp: Blueprint) {
+    if (!confirm(`Withdraw "${bp.title}" back to draft? You can re-submit later.`)) return;
+    setActionLoading(bp.id);
+    try {
+      const res = await fetch(`/api/blueprints/${bp.accessToken}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "DRAFT" }),
+      });
+      if (res.ok) loadBlueprints();
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDuplicate(bp: Blueprint) {
+    setActionLoading(bp.id);
+    try {
+      const res = await fetch(`/api/blueprints/${bp.accessToken}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const payload = {
+        courseId: data.courseId,
+        instructorName: data.instructorName,
+        title: `${data.title} (Copy)`,
+        examDate: null,
+        duration: data.duration,
+        totalMarks: String(data.totalMarks),
+        semester: data.semester,
+        academicYear: data.academicYear,
+        topics: data.topics.map((t: { topicId: string; questionCount: number; totalPoints: number; bloomRemember: number; bloomUnderstand: number; bloomApply: number; bloomAnalyze: number; bloomEvaluate: number; bloomCreate: number; questionTypes: { questionType: string; count: number }[] }) => ({
+          topicId: t.topicId,
+          questionCount: t.questionCount,
+          totalPoints: t.totalPoints,
+          bloomRemember: t.bloomRemember,
+          bloomUnderstand: t.bloomUnderstand,
+          bloomApply: t.bloomApply,
+          bloomAnalyze: t.bloomAnalyze,
+          bloomEvaluate: t.bloomEvaluate,
+          bloomCreate: t.bloomCreate,
+          questionTypes: t.questionTypes.map((qt: { questionType: string; count: number }) => ({ questionType: qt.questionType, count: qt.count })),
+        })),
+        status: "DRAFT",
+      };
+      const createRes = await fetch("/api/blueprints", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (createRes.ok) {
+        const created = await createRes.json();
+        router.push(`/instructor/edit/${created.accessToken}`);
+      }
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   return (
@@ -72,7 +145,7 @@ export default function InstructorDashboard() {
       <div className="flex flex-wrap gap-3 mb-6">
         {/* Status filter */}
         <div className="flex gap-1">
-          {["", "DRAFT", "SUBMITTED", "APPROVED", "REJECTED"].map((s) => (
+          {["", "DRAFT", "SUBMITTED", "APPROVED", "NEEDS_REVISION"].map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
@@ -164,7 +237,7 @@ export default function InstructorDashboard() {
                     >
                       View
                     </Link>
-                    {(bp.status === "DRAFT" || bp.status === "REJECTED") && (
+                    {(bp.status === "DRAFT" || bp.status === "NEEDS_REVISION") && (
                       <Link
                         href={`/instructor/edit/${bp.accessToken}`}
                         className="text-indigo-600 hover:text-indigo-800 text-xs"
@@ -172,6 +245,22 @@ export default function InstructorDashboard() {
                         Edit
                       </Link>
                     )}
+                    {bp.status === "SUBMITTED" && (
+                      <button
+                        onClick={() => handleWithdraw(bp)}
+                        disabled={actionLoading === bp.id}
+                        className="text-amber-600 hover:text-amber-800 text-xs disabled:opacity-50"
+                      >
+                        Withdraw
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDuplicate(bp)}
+                      disabled={actionLoading === bp.id}
+                      className="text-gray-500 hover:text-gray-700 text-xs disabled:opacity-50"
+                    >
+                      Duplicate
+                    </button>
                     <button
                       onClick={() => copyToken(bp.accessToken, bp.id)}
                       className="text-gray-400 hover:text-gray-600 text-xs"
