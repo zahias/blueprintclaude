@@ -118,6 +118,51 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
     updateEntry(entryIndex, { questionTypes: existing });
   }
 
+  function distribute(total: number, slots: number) {
+    if (total <= 0) return Array.from({ length: slots }, () => 0);
+    const base = Math.floor(total / slots);
+    const remainder = total % slots;
+    return Array.from({ length: slots }, (_, i) => base + (i < remainder ? 1 : 0));
+  }
+
+  function applyEvenBloom(index: number) {
+    const values = distribute(entries[index].questionCount, BLOOM_LEVELS.length);
+    updateEntry(index, {
+      bloomRemember: values[0],
+      bloomUnderstand: values[1],
+      bloomApply: values[2],
+      bloomAnalyze: values[3],
+      bloomEvaluate: values[4],
+      bloomCreate: values[5],
+    });
+  }
+
+  function applyHotLotBloom(index: number) {
+    const questionCount = entries[index].questionCount;
+    const lotTotal = Math.round(questionCount * 0.4);
+    const hotTotal = Math.max(0, questionCount - lotTotal);
+    const lot = distribute(lotTotal, LOT_LEVELS.length);
+    const hot = distribute(hotTotal, HOT_LEVELS.length);
+    updateEntry(index, {
+      bloomRemember: lot[0],
+      bloomUnderstand: lot[1],
+      bloomApply: lot[2],
+      bloomAnalyze: hot[0],
+      bloomEvaluate: hot[1],
+      bloomCreate: hot[2],
+    });
+  }
+
+  function applyEvenQuestionTypes(index: number) {
+    const values = distribute(entries[index].questionCount, QUESTION_TYPES.length);
+    updateEntry(index, {
+      questionTypes: QUESTION_TYPES.map((qt, i) => ({
+        questionType: qt.value,
+        count: values[i],
+      })).filter((qt) => qt.count > 0),
+    });
+  }
+
   function getBloomSum(entry: BlueprintTopicEntry) {
     return (
       entry.bloomRemember +
@@ -250,6 +295,24 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
                 <p className="text-[11px] text-gray-400 mb-3">
                   Distribute questions across cognitive levels. Total must equal {entry.questionCount || "# of questions"}.
                 </p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => applyEvenBloom(index)}
+                    disabled={!hasQuestions}
+                    className="px-2.5 py-1.5 bg-gray-100 text-gray-700 rounded text-xs font-medium hover:bg-gray-200 transition disabled:opacity-50"
+                  >
+                    Even Split
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyHotLotBloom(index)}
+                    disabled={!hasQuestions}
+                    className="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium hover:bg-indigo-100 transition disabled:opacity-50"
+                  >
+                    40/60 LOT-HOT
+                  </button>
+                </div>
 
                 {/* LOT group */}
                 <div className="mb-3">
@@ -334,6 +397,16 @@ export default function TopicBuilder({ topics, entries, onChange }: TopicBuilder
                 <p className="text-[11px] text-gray-400 mb-3">
                   Set the number of questions for each type. Total must equal {entry.questionCount || "# of questions"}.
                 </p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => applyEvenQuestionTypes(index)}
+                    disabled={!hasQuestions}
+                    className="px-2.5 py-1.5 bg-gray-100 text-gray-700 rounded text-xs font-medium hover:bg-gray-200 transition disabled:opacity-50"
+                  >
+                    Even Split
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {QUESTION_TYPES.map((qt) => {

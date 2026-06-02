@@ -35,11 +35,15 @@ export default function CoordinatorDashboard() {
     const res = await fetch("/api/coordinator/blueprints");
     if (res.ok) {
       const all: Blueprint[] = await res.json();
+      console.log("[coordinator page] API returned", all.length, "blueprints");
       let filtered = all;
       if (statusFilter) filtered = filtered.filter((b) => b.status === statusFilter);
       if (semesterFilter) filtered = filtered.filter((b) => b.semester === semesterFilter);
       if (yearFilter) filtered = filtered.filter((b) => b.academicYear === yearFilter);
+      console.log("[coordinator page] After filtering:", filtered.length, "| statusFilter:", statusFilter);
       setBlueprints(filtered);
+    } else {
+      console.error("[coordinator page] API error:", res.status, await res.text());
     }
     setLoading(false);
   }

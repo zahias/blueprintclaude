@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminFromCookies } from "@/lib/auth";
 import { notifyBlueprintStatusChange } from "@/lib/email";
+import { getBlueprintPayloadIssues, getSubmitIssues, type BlueprintTopicEntry } from "@/lib/types";
+import type { QuestionType } from "@/generated/prisma/enums";
 
 // Fetch blueprint by accessToken (public) or by id (admin)
 export async function GET(
@@ -116,6 +118,25 @@ export async function PUT(
 
   const { instructorName, title, examDate, duration, totalMarks, topics, status, semester, academicYear } = body;
 
+  const parsedTotalMarks = parseFloat(totalMarks);
+  if (!Number.isFinite(parsedTotalMarks) || parsedTotalMarks < 0) {
+    return NextResponse.json({ error: "totalMarks must be 0 or more" }, { status: 400 });
+  }
+
+  const courseTopics = await prisma.topic.findMany({
+    where: { courseId: existing.courseId },
+    select: { id: true, name: true },
+  });
+  const topicEntries = (topics || []) as BlueprintTopicEntry[];
+  const payloadIssues = getBlueprintPayloadIssues(topicEntries, courseTopics);
+  const submitIssues = status === "SUBMITTED"
+    ? getSubmitIssues(topicEntries, courseTopics, parsedTotalMarks)
+    : [];
+  const issues = [...payloadIssues, ...submitIssues.filter((issue) => !payloadIssues.includes(issue))];
+  if (issues.length > 0) {
+    return NextResponse.json({ error: "Blueprint validation failed", issues }, { status: 400 });
+  }
+
   // Delete existing blueprint topics and recreate
   await prisma.blueprintTopic.deleteMany({ where: { blueprintId: existing.id } });
 
@@ -126,13 +147,13 @@ export async function PUT(
       title,
       examDate: examDate ? new Date(examDate) : null,
       duration: duration || null,
-      totalMarks: parseFloat(totalMarks),
+      totalMarks: parsedTotalMarks,
       status: status || existing.status,
       semester: semester || null,
       academicYear: academicYear || null,
-      topics: topics?.length
+      topics: topicEntries.length
         ? {
-            create: topics.map(
+            create: topicEntries.map(
               (t: {
                 topicId: string;
                 questionCount: number;
@@ -145,7 +166,7 @@ export async function PUT(
                 bloomCreate: number;
                 questionTypes: { questionType: string; count: number }[];
               }) => ({
-                topicId: t.topicId,
+                topic: { connect: { id: t.topicId } },
                 questionCount: t.questionCount,
                 totalPoints: t.totalPoints,
                 bloomRemember: t.bloomRemember || 0,
@@ -158,7 +179,7 @@ export async function PUT(
                   ? {
                       create: t.questionTypes.map(
                         (qt: { questionType: string; count: number }) => ({
-                          questionType: qt.questionType,
+                          questionType: qt.questionType as QuestionType,
                           count: qt.count,
                         })
                       ),

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminFromCookies } from "@/lib/auth";
 import { getInstructorFromCookies } from "@/lib/instructorAuth";
+import { getBlueprintPayloadIssues, getSubmitIssues, type BlueprintTopicEntry } from "@/lib/types";
+import type { QuestionType } from "@/generated/prisma/enums";
 
 // Admin: list all blueprints with optional filters
 export async function GET(req: NextRequest) {
@@ -41,6 +43,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const parsedTotalMarks = parseFloat(totalMarks);
+  if (!Number.isFinite(parsedTotalMarks) || parsedTotalMarks < 0) {
+    return NextResponse.json({ error: "totalMarks must be 0 or more" }, { status: 400 });
+  }
+
+  const courseTopics = await prisma.topic.findMany({
+    where: { courseId },
+    select: { id: true, name: true },
+  });
+  const topicEntries = (topics || []) as BlueprintTopicEntry[];
+  const payloadIssues = getBlueprintPayloadIssues(topicEntries, courseTopics);
+  const submitIssues = status === "SUBMITTED"
+    ? getSubmitIssues(topicEntries, courseTopics, parsedTotalMarks)
+    : [];
+  const issues = [...payloadIssues, ...submitIssues.filter((issue) => !payloadIssues.includes(issue))];
+  if (issues.length > 0) {
+    return NextResponse.json({ error: "Blueprint validation failed", issues }, { status: 400 });
+  }
+
   // Try to get instructor from cookies for linking
   const instructor = await getInstructorFromCookies();
 
@@ -54,11 +75,11 @@ export async function POST(req: NextRequest) {
       academicYear: academicYear || null,
       examDate: examDate ? new Date(examDate) : null,
       duration: duration || null,
-      totalMarks: parseFloat(totalMarks),
+      totalMarks: parsedTotalMarks,
       status: status || "DRAFT",
-      topics: topics?.length
+      topics: topicEntries.length
         ? {
-            create: topics.map(
+            create: topicEntries.map(
               (t: {
                 topicId: string;
                 questionCount: number;
@@ -71,7 +92,7 @@ export async function POST(req: NextRequest) {
                 bloomCreate: number;
                 questionTypes: { questionType: string; count: number }[];
               }) => ({
-                topicId: t.topicId,
+                topic: { connect: { id: t.topicId } },
                 questionCount: t.questionCount,
                 totalPoints: t.totalPoints,
                 bloomRemember: t.bloomRemember || 0,
@@ -84,7 +105,7 @@ export async function POST(req: NextRequest) {
                   ? {
                       create: t.questionTypes.map(
                         (qt: { questionType: string; count: number }) => ({
-                          questionType: qt.questionType,
+                          questionType: qt.questionType as QuestionType,
                           count: qt.count,
                         })
                       ),
