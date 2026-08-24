@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { clearRoleCookies } from "@/lib/cookies";
 
 export async function POST() {
-  const cookieStore = await cookies();
-  cookieStore.set("instructor_token", "", { maxAge: 0, path: "/" });
-  return NextResponse.json({ success: true });
+  const response = NextResponse.json({ success: true });
+  clearRoleCookies(response);
+  return response;
 }

@@ -18,7 +18,6 @@ interface TopicEntry {
     name: string;
     los: { learningOutcomeId: string; learningOutcome: { code: string } }[];
   };
-  questionTypes: { questionType: string; count: number }[];
 }
 
 interface QADashboardProps {
@@ -34,7 +33,7 @@ interface QADashboardProps {
 export default function QADashboard({ blueprint }: QADashboardProps) {
   const [showDetails, setShowDetails] = useState(false);
 
-  const { bloomData, loData, loCoverage, totalQuestions, totalPoints, hotPercent, lotPercent } = useMemo(() => {
+  const { bloomData, loData, loCoverage, totalQuestions, highOrderPercent, lowOrderPercent, readinessIssues } = useMemo(() => {
     const topics = blueprint.topics || [];
     const courseLOs = blueprint.course?.los || [];
 
@@ -53,46 +52,76 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
       color: b.color,
     })).filter((d) => d.value > 0);
 
-    // LO coverage: derive from topic → LO links
-    const loPointsMap: Record<string, number> = {};
+    // LO coverage: derive from topic -> LO links using question counts.
+    const loQuestionMap: Record<string, number> = {};
     const loCoveredSet = new Set<string>();
 
     topics.forEach((t) => {
       const topicLOs = t.topic.los || [];
-      const pointsPerLO = topicLOs.length > 0 ? t.totalPoints / topicLOs.length : 0;
+      const questionsPerLO = topicLOs.length > 0 ? t.questionCount / topicLOs.length : 0;
       topicLOs.forEach((tl) => {
         loCoveredSet.add(tl.learningOutcomeId);
-        loPointsMap[tl.learningOutcomeId] = (loPointsMap[tl.learningOutcomeId] || 0) + pointsPerLO;
+        loQuestionMap[tl.learningOutcomeId] = (loQuestionMap[tl.learningOutcomeId] || 0) + questionsPerLO;
       });
     });
 
     const loData = courseLOs.map((lo) => ({
       code: lo.code,
-      points: Math.round((loPointsMap[lo.id] || 0) * 10) / 10,
+      questions: Math.round((loQuestionMap[lo.id] || 0) * 10) / 10,
     }));
 
     const loCoverage = courseLOs.map((lo) => ({
       code: lo.code,
       description: lo.description,
       covered: loCoveredSet.has(lo.id),
-      points: Math.round((loPointsMap[lo.id] || 0) * 10) / 10,
+      questions: Math.round((loQuestionMap[lo.id] || 0) * 10) / 10,
     }));
 
     const totalQuestions = topics.reduce((s, t) => s + t.questionCount, 0);
-    const totalPoints = topics.reduce((s, t) => s + t.totalPoints, 0);
 
-    // HOT/LOT calculation
-    const lot = bloomAgg.bloomRemember + bloomAgg.bloomUnderstand + bloomAgg.bloomApply;
-    const hot = bloomAgg.bloomAnalyze + bloomAgg.bloomEvaluate + bloomAgg.bloomCreate;
-    const total = lot + hot;
-    const lotPercent = total > 0 ? Math.round((lot / total) * 100) : 0;
-    const hotPercent = total > 0 ? Math.round((hot / total) * 100) : 0;
+    const lowOrder = bloomAgg.bloomRemember + bloomAgg.bloomUnderstand + bloomAgg.bloomApply;
+    const highOrder = bloomAgg.bloomAnalyze + bloomAgg.bloomEvaluate + bloomAgg.bloomCreate;
+    const total = lowOrder + highOrder;
+    const lowOrderPercent = total > 0 ? Math.round((lowOrder / total) * 100) : 0;
+    const highOrderPercent = total > 0 ? Math.round((highOrder / total) * 100) : 0;
+    const readinessIssues: string[] = [];
 
-    return { bloomData, loData, loCoverage, totalQuestions, totalPoints, hotPercent, lotPercent };
+    if (topics.length === 0) {
+      readinessIssues.push("Add at least one topic.");
+    }
+    if (blueprint.totalMarks > 0 && totalQuestions !== blueprint.totalMarks) {
+      readinessIssues.push(`Matrix has ${totalQuestions} questions but Exam Details says ${blueprint.totalMarks}`);
+    }
+    topics.forEach((topic, index) => {
+      const bloomTotal = BLOOM_LEVELS.reduce(
+        (sum, b) => sum + ((topic as unknown as Record<string, number>)[b.key] || 0),
+        0
+      );
+      if (topic.questionCount > 0 && bloomTotal !== topic.questionCount) {
+        readinessIssues.push(`Topic ${index + 1}: Bloom total must equal questions.`);
+      }
+    });
+
+    return { bloomData, loData, loCoverage, totalQuestions, highOrderPercent, lowOrderPercent, readinessIssues };
   }, [blueprint]);
+
+  const ready = readinessIssues.length === 0;
 
   return (
     <div className="space-y-3">
+      <div className={`rounded-2xl border p-4 ${ready ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
+        <p className={`text-sm font-semibold ${ready ? "text-green-800" : "text-amber-800"}`}>
+          {ready ? "Ready for review" : "Not ready yet"}
+        </p>
+        <p className={`mt-1 text-xs ${ready ? "text-green-700" : "text-amber-700"}`}>
+          {ready
+            ? "Totals and distributions are aligned."
+            : readinessIssues[0]}
+        </p>
+        {!ready && readinessIssues.length > 1 && (
+          <p className="mt-2 text-xs text-amber-600">{readinessIssues.length - 1} more issue{readinessIssues.length === 2 ? "" : "s"} to resolve</p>
+        )}
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3">
@@ -101,33 +130,32 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
           <p className="text-2xl font-bold text-gray-900">{totalQuestions}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-400">Total Points</p>
+          <p className="text-xs text-gray-400">Target Questions</p>
           <p className="text-2xl font-bold text-gray-900">
-            {totalPoints}
-            <span className="text-sm font-normal text-gray-400"> / {blueprint.totalMarks}</span>
+            {blueprint.totalMarks}
           </p>
         </div>
       </div>
 
-      {/* HOT/LOT bar */}
+      {/* Cognitive balance bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center gap-1 mb-2">
           <p className="text-xs font-medium text-gray-500">Cognitive Balance</p>
-          <HelpTooltip text="LOT (Lower-Order Thinking): Remember, Understand, Apply. HOT (Higher-Order Thinking): Analyze, Evaluate, Create. A good exam typically has 40-60% HOT questions." />
+          <HelpTooltip text="Low Order Thinking: Remember, Understand, Apply. High Order Thinking: Analyze, Evaluate, Create." />
         </div>
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs text-gray-500 w-20">LOT {lotPercent}%</span>
+          <span className="text-xs text-gray-500 w-28">Low Order {lowOrderPercent}%</span>
           <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden flex">
             <div
               className="bg-amber-400 h-full transition-all"
-              style={{ width: `${lotPercent}%` }}
+              style={{ width: `${lowOrderPercent}%` }}
             />
             <div
               className="bg-indigo-500 h-full transition-all"
-              style={{ width: `${hotPercent}%` }}
+              style={{ width: `${highOrderPercent}%` }}
             />
           </div>
-          <span className="text-xs text-gray-500 w-20 text-right">HOT {hotPercent}%</span>
+          <span className="text-xs text-gray-500 w-28 text-right">High Order {highOrderPercent}%</span>
         </div>
         <div className="flex justify-between text-[10px] text-gray-400">
           <span>Remember • Understand • Apply</span>
@@ -151,8 +179,8 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
                 }`}
               >
                 {lo.covered ? "✓" : "✗"} {lo.code}
-                {lo.covered && lo.points > 0 && (
-                  <span className="text-green-500 font-sans text-[10px]">{lo.points}pt</span>
+                {lo.covered && lo.questions > 0 && (
+                  <span className="text-green-500 font-sans text-[10px]">{lo.questions}q</span>
                 )}
               </span>
             ))}
@@ -208,13 +236,13 @@ export default function QADashboard({ blueprint }: QADashboardProps) {
               {/* LO Points Bar Chart */}
               {loData.length > 0 && (
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <p className="text-xs font-medium text-gray-500 mb-2">Points per Learning Outcome</p>
+                  <p className="text-xs font-medium text-gray-500 mb-2">Questions per Learning Outcome</p>
                   <ResponsiveContainer width="100%" height={Math.max(150, loData.length * 35)}>
                     <BarChart data={loData} layout="vertical" margin={{ left: 10, right: 20 }}>
                       <XAxis type="number" tick={{ fontSize: 10 }} />
                       <YAxis type="category" dataKey="code" tick={{ fontSize: 10 }} width={40} />
                       <Tooltip />
-                      <Bar dataKey="points" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="questions" fill="#6366f1" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

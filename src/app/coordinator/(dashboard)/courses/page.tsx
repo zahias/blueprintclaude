@@ -73,11 +73,19 @@ export default function CoordinatorCoursesPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Courses</h1>
-        <button
-          onClick={() => { setForm({ majorId: majors[0]?.id || "", code: "", name: "", description: "" }); setEditingId(null); setShowForm(true); }}
-          className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium"
-        >+ Add Course</button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Courses & Syllabi</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage course records and import semester syllabi.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/coordinator/term-setup#syllabi" className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium">
+            Bulk Syllabus Import
+          </Link>
+          <button
+            onClick={() => { setForm({ majorId: majors[0]?.id || "", code: "", name: "", description: "" }); setEditingId(null); setShowForm(true); }}
+            className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium"
+          >+ Add Course</button>
+        </div>
       </div>
 
       <div className="mb-4">

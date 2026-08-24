@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
+import { getVerifiedCoordinator } from "@/lib/session.server";
 
 export async function GET() {
-  const coordinator = await getCoordinatorFromCookies();
+  const coordinator = await getVerifiedCoordinator();
   if (!coordinator) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -14,9 +14,6 @@ export async function GET() {
     select: { majorId: true },
   });
   const majorIds = assignments.map((a) => a.majorId);
-
-  console.log("[coord/blueprints] coordinator:", coordinator.id, coordinator.name);
-  console.log("[coord/blueprints] majorIds:", majorIds);
 
   const blueprints = await prisma.blueprint.findMany({
     where: {
@@ -29,17 +26,6 @@ export async function GET() {
       _count: { select: { topics: true, comments: true } },
     },
   });
-
-  console.log("[coord/blueprints] found:", blueprints.length);
-
-  // Debug: if empty, check what exists for these majors
-  if (blueprints.length === 0 && majorIds.length > 0) {
-    const allForMajors = await prisma.blueprint.findMany({
-      where: { course: { majorId: { in: majorIds } } },
-      select: { id: true, status: true, title: true, course: { select: { code: true, majorId: true } } },
-    });
-    console.log("[coord/blueprints] ALL blueprints for these majors (any status):", JSON.stringify(allForMajors));
-  }
 
   return NextResponse.json(blueprints);
 }

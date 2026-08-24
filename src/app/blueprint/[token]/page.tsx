@@ -2,8 +2,8 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS, BLOOM_LEVELS, QUESTION_TYPES } from "@/lib/constants";
-import QADashboard from "@/components/QADashboard";
+import { BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS } from "@/lib/constants";
+import BlueprintQuestionReview from "@/components/BlueprintQuestionReview";
 
 interface Blueprint {
   id: string;
@@ -41,7 +41,6 @@ interface Blueprint {
       name: string;
       los: { learningOutcomeId: string; learningOutcome: { code: string } }[];
     };
-    questionTypes: { questionType: string; count: number }[];
   }[];
   comments: { id: string; content: string; createdAt: string; admin: { name: string } | null; coordinator: { name: string } | null }[];
 }
@@ -77,7 +76,6 @@ export default function ViewBlueprintPage({ params }: { params: Promise<{ token:
   if (!blueprint) return null;
 
   const totalQuestions = blueprint.topics.reduce((sum, t) => sum + t.questionCount, 0);
-  const totalPoints = blueprint.topics.reduce((sum, t) => sum + t.totalPoints, 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -118,7 +116,7 @@ export default function ViewBlueprintPage({ params }: { params: Promise<{ token:
               <p className="font-medium text-gray-900">{blueprint.instructorName}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">Total Marks</p>
+              <p className="text-xs text-gray-400">Target Questions</p>
               <p className="font-medium text-gray-900">{blueprint.totalMarks}</p>
             </div>
             <div>
@@ -126,8 +124,8 @@ export default function ViewBlueprintPage({ params }: { params: Promise<{ token:
               <p className="font-medium text-gray-900">{totalQuestions}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">Duration</p>
-              <p className="font-medium text-gray-900">{blueprint.duration ? `${blueprint.duration} min` : "—"}</p>
+              <p className="text-xs text-gray-400">Exam Type</p>
+              <p className="font-medium text-gray-900">{blueprint.title}</p>
             </div>
           </div>
 
@@ -138,77 +136,15 @@ export default function ViewBlueprintPage({ params }: { params: Promise<{ token:
           </div>
         </div>
 
-        {/* Topic breakdown */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Topic Breakdown</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-2 font-medium text-gray-500">Topic</th>
-                  <th className="text-center px-4 py-2 font-medium text-gray-500">LOs</th>
-                  <th className="text-center px-4 py-2 font-medium text-gray-500">Qs</th>
-                  <th className="text-center px-4 py-2 font-medium text-gray-500">Pts</th>
-                  {BLOOM_LEVELS.map((b) => (
-                    <th key={b.key} className="text-center px-2 py-2 font-medium text-gray-500 text-xs">
-                      {b.label.slice(0, 3)}
-                    </th>
-                  ))}
-                  <th className="text-left px-4 py-2 font-medium text-gray-500">Q Types</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {blueprint.topics.map((bt, i) => (
-                  <tr key={i}>
-                    <td className="px-4 py-2 font-medium text-gray-900">{bt.topic.name}</td>
-                    <td className="px-4 py-2 text-center">
-                      {bt.topic.los.map((l) => (
-                        <span key={l.learningOutcomeId} className="bg-indigo-100 text-indigo-700 text-xs font-mono px-1 rounded mr-1">
-                          {l.learningOutcome.code}
-                        </span>
-                      ))}
-                    </td>
-                    <td className="px-4 py-2 text-center">{bt.questionCount}</td>
-                    <td className="px-4 py-2 text-center font-medium">{bt.totalPoints}</td>
-                    {BLOOM_LEVELS.map((b) => (
-                      <td key={b.key} className="px-2 py-2 text-center text-xs">
-                        {(bt as Record<string, unknown>)[b.key] as number || 0}
-                      </td>
-                    ))}
-                    <td className="px-4 py-2 text-xs text-gray-600">
-                      {bt.questionTypes.map((qt) => {
-                        const label = QUESTION_TYPES.find((q) => q.value === qt.questionType)?.label || qt.questionType;
-                        return `${label}: ${qt.count}`;
-                      }).join(", ")}
-                    </td>
-                  </tr>
-                ))}
-                {/* Totals row */}
-                <tr className="bg-gray-50 font-semibold">
-                  <td className="px-4 py-2 text-gray-900">Total</td>
-                  <td />
-                  <td className="px-4 py-2 text-center">{totalQuestions}</td>
-                  <td className="px-4 py-2 text-center">{totalPoints}</td>
-                  {BLOOM_LEVELS.map((b) => (
-                    <td key={b.key} className="px-2 py-2 text-center text-xs">
-                      {blueprint.topics.reduce((sum, t) => sum + ((t as Record<string, unknown>)[b.key] as number || 0), 0)}
-                    </td>
-                  ))}
-                  <td />
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {totalPoints !== blueprint.totalMarks && (
-            <div className="mt-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-2 text-sm">
-              ⚠️ Total points from topics ({totalPoints}) does not match declared total marks ({blueprint.totalMarks}).
-            </div>
-          )}
-        </div>
-
-        {/* QA Dashboard */}
-        <QADashboard blueprint={blueprint} />
+        <BlueprintQuestionReview
+          examType={blueprint.title}
+          courseLabel={`${blueprint.course.code} - ${blueprint.course.name}`}
+          termLabel=""
+          totalQuestionsExpected={blueprint.totalMarks}
+          courseLOs={blueprint.course.los}
+          topics={blueprint.topics}
+          issues={totalQuestions === blueprint.totalMarks ? [] : [`Matrix has ${totalQuestions} questions but Exam Details says ${blueprint.totalMarks}`]}
+        />
 
         {/* Comments (if any) */}
         {blueprint.comments.length > 0 && (

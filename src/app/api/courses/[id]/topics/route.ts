@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
+import { resolveCourseSyllabusId, syllabusWhere } from "@/lib/syllabus.server";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: courseId } = await params;
+  const syllabusId = await resolveCourseSyllabusId(courseId, req.nextUrl.searchParams);
   const topics = await prisma.topic.findMany({
-    where: { courseId },
+    where: { courseId, ...syllabusWhere(syllabusId) },
     orderBy: { sortOrder: "asc" },
     include: { los: { include: { learningOutcome: true } } },
   });
@@ -19,24 +20,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const coordinator = await getCoordinatorFromCookies();
-  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { id: courseId } = await params;
-  const { name, description, sortOrder, loIds } = await req.json();
-  if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
-
-  const topic = await prisma.topic.create({
-    data: {
-      courseId,
-      name,
-      description,
-      sortOrder: sortOrder ?? 0,
-      los: loIds?.length
-        ? { create: loIds.map((loId: string) => ({ learningOutcomeId: loId })) }
-        : undefined,
-    },
-    include: { los: { include: { learningOutcome: true } } },
-  });
-  return NextResponse.json(topic, { status: 201 });
+  await params;
+  await req.json().catch(() => null);
+  return NextResponse.json(
+    { error: "Topics are managed through syllabus import for the selected term." },
+    { status: 410 }
+  );
 }

@@ -99,8 +99,8 @@ export async function notifyBlueprintStatusChange(
             ${field("Title", bp.title)}
             ${field("Course", courseName)}
             ${field("Major", majorName)}
-            ${field("Total Marks", String(bp.totalMarks))}
-            ${btn(`${BASE_URL}/coordinator`, "Review Blueprints")}
+            ${field("Total Questions", String(bp.totalMarks))}
+            ${btn(`${BASE_URL}/coordinator/blueprints`, "Review Blueprints")}
           `)
         );
       }

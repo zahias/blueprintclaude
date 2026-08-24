@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { BLOOM_LEVELS, QUESTION_TYPES } from "@/lib/constants";
+import { BLOOM_LEVELS } from "@/lib/constants";
 
 interface Blueprint {
   id: string;
@@ -33,7 +33,6 @@ interface Blueprint {
       name: string;
       los: { learningOutcomeId: string; learningOutcome: { code: string } }[];
     };
-    questionTypes: { questionType: string; count: number }[];
   }[];
 }
 
@@ -71,9 +70,7 @@ export default function ExportPage({ params }: { params: Promise<{ token: string
     doc.text(`Course: ${blueprint.course.code} — ${blueprint.course.name}`, 14, 42);
     doc.text(`Major: ${blueprint.course.major.name}`, 14, 49);
     doc.text(`Instructor: ${blueprint.instructorName}`, 14, 56);
-    doc.text(`Total Marks: ${blueprint.totalMarks}`, pageWidth / 2, 35);
-    if (blueprint.duration) doc.text(`Duration: ${blueprint.duration} min`, pageWidth / 2, 42);
-    if (blueprint.examDate) doc.text(`Date: ${new Date(blueprint.examDate).toLocaleDateString()}`, pageWidth / 2, 49);
+    doc.text(`Total Questions: ${blueprint.totalMarks}`, pageWidth / 2, 35);
 
     let y = 68;
 
@@ -82,36 +79,28 @@ export default function ExportPage({ params }: { params: Promise<{ token: string
       bt.topic.name,
       bt.topic.los.map((l) => l.learningOutcome.code).join(", "),
       bt.questionCount.toString(),
-      bt.totalPoints.toString(),
       bt.bloomRemember.toString(),
       bt.bloomUnderstand.toString(),
       bt.bloomApply.toString(),
       bt.bloomAnalyze.toString(),
       bt.bloomEvaluate.toString(),
       bt.bloomCreate.toString(),
-      bt.questionTypes.map((qt) => {
-        const label = QUESTION_TYPES.find((q) => q.value === qt.questionType)?.label || qt.questionType;
-        return `${label}: ${qt.count}`;
-      }).join(", "),
     ]);
 
     // Add totals row
     const totalQ = blueprint.topics.reduce((s, t) => s + t.questionCount, 0);
-    const totalP = blueprint.topics.reduce((s, t) => s + t.totalPoints, 0);
     topicRows.push([
       "TOTAL",
       "",
       totalQ.toString(),
-      totalP.toString(),
       ...BLOOM_LEVELS.map((b) =>
         blueprint.topics.reduce((s, t) => s + ((t as unknown as Record<string, number>)[b.key] || 0), 0).toString()
       ),
-      "",
     ]);
 
     autoTable(doc, {
       startY: y,
-      head: [["Topic", "LOs", "Qs", "Pts", "Rem", "Und", "App", "Ana", "Eva", "Cre", "Q Types"]],
+      head: [["Topic", "LOs", "Questions", "Rem", "Und", "App", "Ana", "Eva", "Cre"]],
       body: topicRows,
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [99, 102, 241] },
@@ -126,14 +115,14 @@ export default function ExportPage({ params }: { params: Promise<{ token: string
     doc.text("Learning Outcome Coverage", 14, y);
     y += 5;
 
-    const loPointsMap: Record<string, number> = {};
+    const loQuestionMap: Record<string, number> = {};
     const loCoveredSet = new Set<string>();
     blueprint.topics.forEach((t) => {
       const topicLOs = t.topic.los || [];
-      const pointsPerLO = topicLOs.length > 0 ? t.totalPoints / topicLOs.length : 0;
+      const questionsPerLO = topicLOs.length > 0 ? t.questionCount / topicLOs.length : 0;
       topicLOs.forEach((tl) => {
         loCoveredSet.add(tl.learningOutcomeId);
-        loPointsMap[tl.learningOutcomeId] = (loPointsMap[tl.learningOutcomeId] || 0) + pointsPerLO;
+        loQuestionMap[tl.learningOutcomeId] = (loQuestionMap[tl.learningOutcomeId] || 0) + questionsPerLO;
       });
     });
 
@@ -141,12 +130,12 @@ export default function ExportPage({ params }: { params: Promise<{ token: string
       lo.code,
       lo.description,
       loCoveredSet.has(lo.id) ? "Yes" : "NO",
-      Math.round((loPointsMap[lo.id] || 0) * 10) / 10 + " pts",
+      Math.round((loQuestionMap[lo.id] || 0) * 10) / 10 + " questions",
     ]);
 
     autoTable(doc, {
       startY: y,
-      head: [["Code", "Description", "Covered?", "Points"]],
+      head: [["Code", "Description", "Covered?", "Questions"]],
       body: loRows,
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [99, 102, 241] },
@@ -183,8 +172,8 @@ export default function ExportPage({ params }: { params: Promise<{ token: string
       startY: y,
       head: [["Category", "Questions", "Percentage"]],
       body: [
-        ["Lower-Order Thinking (Remember, Understand, Apply)", lot.toString(), total > 0 ? Math.round((lot / total) * 100) + "%" : "0%"],
-        ["Higher-Order Thinking (Analyze, Evaluate, Create)", hot.toString(), total > 0 ? Math.round((hot / total) * 100) + "%" : "0%"],
+        ["Low Order Thinking (Remember, Understand, Apply)", lot.toString(), total > 0 ? Math.round((lot / total) * 100) + "%" : "0%"],
+        ["High Order Thinking (Analyze, Evaluate, Create)", hot.toString(), total > 0 ? Math.round((hot / total) * 100) + "%" : "0%"],
         ["Total", total.toString(), "100%"],
       ],
       styles: { fontSize: 9, cellPadding: 3 },

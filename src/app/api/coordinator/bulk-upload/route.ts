@@ -3,6 +3,8 @@ import prisma from "@/lib/prisma";
 import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
 import * as XLSX from "xlsx";
 
+// Deprecated: legacy Excel import writes course-level topics/CLOs.
+// Use /coordinator/syllabus-import for semester-versioned bulk syllabus imports.
 // POST: bulk import courses, topics, LOs from uploaded Excel file
 export async function POST(req: NextRequest) {
   try {
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
     // ─── Sheet 3: Topics ────────────────────────────────────────
     const topicsSheet = workbook.Sheets["Topics"];
     if (topicsSheet) {
-      const rows = XLSX.utils.sheet_to_json<{ MajorName: string; CourseCode: string; TopicName: string; Description?: string; LinkedLOs?: string }>(topicsSheet);
+      const rows = XLSX.utils.sheet_to_json<{ MajorName: string; CourseCode: string; TopicName: string; LinkedLOs?: string }>(topicsSheet);
       for (const row of rows) {
         if (!row.MajorName || !row.CourseCode || !row.TopicName) {
           results.errors.push(`Topics: missing fields in row - ${JSON.stringify(row)}`);
@@ -93,9 +95,9 @@ export async function POST(req: NextRequest) {
         // Check for existing topic by name within course
         let topic = await prisma.topic.findFirst({ where: { courseId: course.id, name: row.TopicName } });
         if (topic) {
-          await prisma.topic.update({ where: { id: topic.id }, data: { description: row.Description || null } });
+          await prisma.topic.update({ where: { id: topic.id }, data: { description: null } });
         } else {
-          topic = await prisma.topic.create({ data: { courseId: course.id, name: row.TopicName, description: row.Description || null } });
+          topic = await prisma.topic.create({ data: { courseId: course.id, name: row.TopicName, description: null } });
         }
 
         // Link LOs if specified (comma-separated LO codes)

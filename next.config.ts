@@ -7,6 +7,13 @@ const nextConfig: NextConfig = {
       tailwindcss: path.resolve(__dirname, "node_modules/tailwindcss"),
     },
   },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      tailwindcss: path.resolve(__dirname, "node_modules/tailwindcss"),
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

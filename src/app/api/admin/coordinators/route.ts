@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminFromCookies } from "@/lib/auth";
+import { getVerifiedAdmin } from "@/lib/session.server";
 import { hashPassword } from "@/lib/coordinatorAuth";
 
 export async function GET() {
   try {
-    const admin = await getAdminFromCookies();
+    const admin = await getVerifiedAdmin();
     if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const coordinators = await prisma.coordinator.findMany({
@@ -16,7 +16,6 @@ export async function GET() {
         name: true,
         isActive: true,
         createdAt: true,
-        _count: { select: { comments: true } },
         majors: { select: { major: { select: { id: true, name: true } } } },
       },
     });
@@ -36,7 +35,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const admin = await getAdminFromCookies();
+    const admin = await getVerifiedAdmin();
     if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { email, password, name } = await req.json();

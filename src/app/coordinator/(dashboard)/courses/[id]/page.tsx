@@ -30,6 +30,15 @@ interface Course {
   major: { name: string };
   topics: Topic[];
   los: LO[];
+  syllabi: CourseSyllabus[];
+}
+
+interface CourseSyllabus {
+  id: string;
+  semester: string;
+  academicYear: string;
+  isCurrent: boolean;
+  sourceFileName: string | null;
 }
 
 export default function CoordinatorCourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -42,21 +51,30 @@ export default function CoordinatorCourseDetailPage({ params }: { params: Promis
   const [editingLoId, setEditingLoId] = useState<string | null>(null);
 
   const [showTopicForm, setShowTopicForm] = useState(false);
-  const [topicForm, setTopicForm] = useState({ name: "", description: "", loIds: [] as string[] });
+  const [topicForm, setTopicForm] = useState({ name: "", loIds: [] as string[] });
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
+  const [selectedSyllabusId, setSelectedSyllabusId] = useState("");
 
   async function loadCourse() {
-    const res = await fetch(`/api/courses/${id}`);
-    if (res.ok) setCourse(await res.json());
+    const suffix = selectedSyllabusId ? `?syllabusId=${selectedSyllabusId}` : "";
+    const res = await fetch(`/api/courses/${id}${suffix}`);
+    if (res.ok) {
+      const nextCourse = await res.json();
+      setCourse(nextCourse);
+      if (!selectedSyllabusId && nextCourse.syllabi?.length) {
+        setSelectedSyllabusId(nextCourse.syllabi.find((s: CourseSyllabus) => s.isCurrent)?.id || nextCourse.syllabi[0].id);
+      }
+    }
     setLoading(false);
   }
 
-  useEffect(() => { loadCourse(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadCourse(); }, [id, selectedSyllabusId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleLoSubmit(e: React.FormEvent) {
     e.preventDefault();
     const url = editingLoId ? `/api/courses/${id}/los/${editingLoId}` : `/api/courses/${id}/los`;
-    await fetch(url, { method: editingLoId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(loForm) });
+    const suffix = selectedSyllabusId && !editingLoId ? `?syllabusId=${selectedSyllabusId}` : "";
+    await fetch(`${url}${suffix}`, { method: editingLoId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(loForm) });
     setLoForm({ code: "", description: "" }); setShowLoForm(false); setEditingLoId(null); loadCourse();
   }
 
@@ -68,8 +86,9 @@ export default function CoordinatorCourseDetailPage({ params }: { params: Promis
   async function handleTopicSubmit(e: React.FormEvent) {
     e.preventDefault();
     const url = editingTopicId ? `/api/courses/${id}/topics/${editingTopicId}` : `/api/courses/${id}/topics`;
-    await fetch(url, { method: editingTopicId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(topicForm) });
-    setTopicForm({ name: "", description: "", loIds: [] }); setShowTopicForm(false); setEditingTopicId(null); loadCourse();
+    const suffix = selectedSyllabusId && !editingTopicId ? `?syllabusId=${selectedSyllabusId}` : "";
+    await fetch(`${url}${suffix}`, { method: editingTopicId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(topicForm) });
+    setTopicForm({ name: "", loIds: [] }); setShowTopicForm(false); setEditingTopicId(null); loadCourse();
   }
 
   async function deleteTopic(topicId: string) {
@@ -86,6 +105,29 @@ export default function CoordinatorCourseDetailPage({ params }: { params: Promis
         <Link href="/coordinator/courses" className="text-teal-600 hover:text-teal-800 text-sm mb-2 inline-block">← Back to Courses</Link>
         <h1 className="text-2xl font-bold text-gray-900">{course.code} — {course.name}</h1>
         <p className="text-gray-500 text-sm">{course.major.name} &bull; {course.description || "No description"}</p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+        <label className="block text-xs font-medium text-gray-700 mb-1">Syllabus Version</label>
+        <select
+          value={selectedSyllabusId || "legacy"}
+          onChange={(event) => {
+            setSelectedSyllabusId(event.target.value === "legacy" ? "" : event.target.value);
+            setShowLoForm(false);
+            setShowTopicForm(false);
+          }}
+          className="w-full md:w-96 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+        >
+          <option value="legacy">Legacy course setup</option>
+          {course.syllabi.map((syllabus) => (
+            <option key={syllabus.id} value={syllabus.id}>
+              {syllabus.semester} {syllabus.academicYear}{syllabus.isCurrent ? " (current)" : ""}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-500 mt-2">
+          Imported syllabus versions are semester-specific. New blueprints use the current version by default.
+        </p>
       </div>
 
       {/* Learning Outcomes */}
@@ -138,19 +180,15 @@ export default function CoordinatorCourseDetailPage({ params }: { params: Promis
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Topics ({course.topics.length})</h2>
-          <button onClick={() => { setTopicForm({ name: "", description: "", loIds: [] }); setEditingTopicId(null); setShowTopicForm(true); }} className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700 transition">+ Add Topic</button>
+          <button onClick={() => { setTopicForm({ name: "", loIds: [] }); setEditingTopicId(null); setShowTopicForm(true); }} className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700 transition">+ Add Topic</button>
         </div>
 
         {showTopicForm && (
           <form onSubmit={handleTopicSubmit} className="bg-white rounded-xl border border-gray-200 p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
                 <input value={topicForm.name} onChange={(e) => setTopicForm({ ...topicForm, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none" placeholder="Topic name" required />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                <input value={topicForm.description} onChange={(e) => setTopicForm({ ...topicForm, description: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none" placeholder="Optional" />
               </div>
             </div>
             <div>
@@ -181,7 +219,6 @@ export default function CoordinatorCourseDetailPage({ params }: { params: Promis
               <div key={topic.id} className="px-4 py-3 flex items-start justify-between">
                 <div>
                   <p className="font-medium text-gray-900 text-sm">{topic.name}</p>
-                  {topic.description && <p className="text-gray-500 text-xs mt-0.5">{topic.description}</p>}
                   <div className="flex flex-wrap gap-1 mt-1">
                     {topic.los.map((tl) => (
                       <span key={tl.learningOutcomeId} className="bg-green-100 text-green-700 text-xs font-mono px-1.5 py-0.5 rounded">{tl.learningOutcome.code}</span>
@@ -190,7 +227,7 @@ export default function CoordinatorCourseDetailPage({ params }: { params: Promis
                   </div>
                 </div>
                 <div className="flex gap-2 ml-4 shrink-0">
-                  <button onClick={() => { setTopicForm({ name: topic.name, description: topic.description || "", loIds: topic.los.map((tl) => tl.learningOutcomeId) }); setEditingTopicId(topic.id); setShowTopicForm(true); }} className="text-teal-600 hover:text-teal-800 text-xs">Edit</button>
+                  <button onClick={() => { setTopicForm({ name: topic.name, loIds: topic.los.map((tl) => tl.learningOutcomeId) }); setEditingTopicId(topic.id); setShowTopicForm(true); }} className="text-teal-600 hover:text-teal-800 text-xs">Edit</button>
                   <button onClick={() => deleteTopic(topic.id)} className="text-red-600 hover:text-red-800 text-xs">Delete</button>
                 </div>
               </div>

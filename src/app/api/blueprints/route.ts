@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminFromCookies } from "@/lib/auth";
+import { getVerifiedAdmin } from "@/lib/session.server";
 import { getInstructorFromCookies } from "@/lib/instructorAuth";
-import { getBlueprintPayloadIssues, getSubmitIssues, type BlueprintTopicEntry } from "@/lib/types";
-import type { QuestionType } from "@/generated/prisma/enums";
+import { getInstructorActiveOffering } from "@/lib/terms.server";
+import {
+  getBlueprintPayloadIssues,
+  getQuestionFormatIssues,
+  getSubmitIssues,
+  type BlueprintQuestionFormatEntry,
+  type BlueprintTopicEntry,
+} from "@/lib/types";
 
 // Admin: list all blueprints with optional filters
 export async function GET(req: NextRequest) {
-  const admin = await getAdminFromCookies();
+  const admin = await getVerifiedAdmin();
   const status = req.nextUrl.searchParams.get("status");
   const semester = req.nextUrl.searchParams.get("semester");
   const academicYear = req.nextUrl.searchParams.get("academicYear");
@@ -34,7 +40,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { courseId, instructorName, title, examDate, duration, totalMarks, topics, status, semester, academicYear } = body;
+  const { courseId, instructorName, title, examDate, duration, totalMarks, topics, questionFormats, status, semester, academicYear } = body;
 
   if (!courseId || !instructorName || !title || totalMarks === undefined) {
     return NextResponse.json(
@@ -48,31 +54,50 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "totalMarks must be 0 or more" }, { status: 400 });
   }
 
+  const instructor = await getInstructorFromCookies();
+  const activeOffering = instructor ? await getInstructorActiveOffering(courseId, instructor) : null;
+  if (instructor && !activeOffering) {
+    return NextResponse.json({ error: "Blueprints can only be created for active-term assigned courses" }, { status: 403 });
+  }
+
+  const syllabusId = activeOffering?.syllabi?.[0]?.id;
   const courseTopics = await prisma.topic.findMany({
-    where: { courseId },
+    where: syllabusId ? { courseId, syllabusId } : { courseId },
     select: { id: true, name: true },
   });
-  const topicEntries = (topics || []) as BlueprintTopicEntry[];
+  const topicEntries = ((topics || []) as BlueprintTopicEntry[]).map((topic) => ({
+    ...topic,
+    totalPoints: topic.questionCount,
+  }));
+  const formatEntries = ((questionFormats || []) as BlueprintQuestionFormatEntry[])
+    .filter((format) => format.questionCount > 0 || format.gradeWeight > 0)
+    .map((format) => ({
+      ...format,
+      label: format.label || format.formatType.replaceAll("_", " "),
+    }));
   const payloadIssues = getBlueprintPayloadIssues(topicEntries, courseTopics);
+  const formatIssues = getQuestionFormatIssues(formatEntries, parsedTotalMarks, status === "SUBMITTED");
   const submitIssues = status === "SUBMITTED"
     ? getSubmitIssues(topicEntries, courseTopics, parsedTotalMarks)
     : [];
-  const issues = [...payloadIssues, ...submitIssues.filter((issue) => !payloadIssues.includes(issue))];
+  const issues = [
+    ...payloadIssues,
+    ...formatIssues.filter((issue) => !payloadIssues.includes(issue)),
+    ...submitIssues.filter((issue) => !payloadIssues.includes(issue) && !formatIssues.includes(issue)),
+  ];
   if (issues.length > 0) {
     return NextResponse.json({ error: "Blueprint validation failed", issues }, { status: 400 });
   }
 
-  // Try to get instructor from cookies for linking
-  const instructor = await getInstructorFromCookies();
-
   const blueprint = await prisma.blueprint.create({
     data: {
       courseId,
+      courseOfferingId: activeOffering?.id || null,
       instructorName,
       instructorId: instructor?.id || null,
       title,
-      semester: semester || null,
-      academicYear: academicYear || null,
+      semester: activeOffering?.term.semester || semester || null,
+      academicYear: activeOffering?.term.academicYear || academicYear || null,
       examDate: examDate ? new Date(examDate) : null,
       duration: duration || null,
       totalMarks: parsedTotalMarks,
@@ -90,7 +115,6 @@ export async function POST(req: NextRequest) {
                 bloomAnalyze: number;
                 bloomEvaluate: number;
                 bloomCreate: number;
-                questionTypes: { questionType: string; count: number }[];
               }) => ({
                 topic: { connect: { id: t.topicId } },
                 questionCount: t.questionCount,
@@ -101,23 +125,25 @@ export async function POST(req: NextRequest) {
                 bloomAnalyze: t.bloomAnalyze || 0,
                 bloomEvaluate: t.bloomEvaluate || 0,
                 bloomCreate: t.bloomCreate || 0,
-                questionTypes: t.questionTypes?.length
-                  ? {
-                      create: t.questionTypes.map(
-                        (qt: { questionType: string; count: number }) => ({
-                          questionType: qt.questionType as QuestionType,
-                          count: qt.count,
-                        })
-                      ),
-                    }
-                  : undefined,
               })
             ),
           }
         : undefined,
+      questionFormats: formatEntries.length
+        ? {
+            create: formatEntries.map((format) => ({
+              formatType: format.formatType,
+              group: format.group,
+              label: format.label,
+              questionCount: format.questionCount,
+              gradeWeight: format.gradeWeight,
+            })),
+          }
+        : undefined,
     },
     include: {
-      topics: { include: { questionTypes: true, topic: true } },
+      topics: { include: { topic: true } },
+      questionFormats: true,
     },
   });
 

@@ -13,7 +13,6 @@ interface Coordinator {
   email: string;
   isActive: boolean;
   createdAt: string;
-  _count: { comments: number };
   assignedMajors: Major[];
 }
 
@@ -178,7 +177,6 @@ export default function CoordinatorsPage() {
                 <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Name</th>
                 <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Email</th>
                 <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Majors</th>
-                <th className="text-center px-6 py-3 text-sm font-medium text-gray-500">Reviews</th>
                 <th className="text-center px-6 py-3 text-sm font-medium text-gray-500">Status</th>
                 <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Actions</th>
               </tr>
@@ -211,7 +209,6 @@ export default function CoordinatorsPage() {
                       })}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-center text-gray-700">{coord._count.comments}</td>
                   <td className="px-6 py-4 text-center">
                     <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
                       coord.isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getInstructorFromCookies } from "@/lib/instructorAuth";
+import { getVerifiedInstructor } from "@/lib/session.server";
 
 // GET: list blueprints for the logged-in instructor
 export async function GET(req: NextRequest) {
-  const instructor = await getInstructorFromCookies();
+  const instructor = await getVerifiedInstructor();
   if (!instructor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

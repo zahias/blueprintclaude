@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 
+// Deprecated: legacy Excel template for course-level imports.
+// Use /coordinator/syllabus-import for semester-versioned bulk syllabus imports.
 // GET: download Excel template with dummy data
 export async function GET() {
   const wb = XLSX.utils.book_new();
@@ -29,14 +31,14 @@ export async function GET() {
 
   // Topics sheet
   const topicsData = [
-    { MajorName: "Computer Science", CourseCode: "CS201", TopicName: "Arrays and Linked Lists", Description: "Linear data structures", LinkedLOs: "LO1" },
-    { MajorName: "Computer Science", CourseCode: "CS201", TopicName: "Stacks and Queues", Description: "LIFO and FIFO structures", LinkedLOs: "LO1" },
-    { MajorName: "Computer Science", CourseCode: "CS201", TopicName: "Trees and Graphs", Description: "Non-linear data structures", LinkedLOs: "LO2,LO3" },
-    { MajorName: "Computer Science", CourseCode: "CS301", TopicName: "ER Modeling", Description: "Entity-relationship diagrams", LinkedLOs: "LO1" },
-    { MajorName: "Business Administration", CourseCode: "BA101", TopicName: "Planning and Organizing", Description: "Management functions", LinkedLOs: "LO1" },
+    { MajorName: "Computer Science", CourseCode: "CS201", TopicName: "Arrays and Linked Lists", LinkedLOs: "LO1" },
+    { MajorName: "Computer Science", CourseCode: "CS201", TopicName: "Stacks and Queues", LinkedLOs: "LO1" },
+    { MajorName: "Computer Science", CourseCode: "CS201", TopicName: "Trees and Graphs", LinkedLOs: "LO2,LO3" },
+    { MajorName: "Computer Science", CourseCode: "CS301", TopicName: "ER Modeling", LinkedLOs: "LO1" },
+    { MajorName: "Business Administration", CourseCode: "BA101", TopicName: "Planning and Organizing", LinkedLOs: "LO1" },
   ];
   const topicsWs = XLSX.utils.json_to_sheet(topicsData);
-  topicsWs["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 25 }, { wch: 30 }, { wch: 15 }];
+  topicsWs["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 35 }, { wch: 15 }];
   XLSX.utils.book_append_sheet(wb, topicsWs, "Topics");
 
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });

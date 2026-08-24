@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
+import { getVerifiedCoordinator } from "@/lib/session.server";
+import { getCoordinatorMajorIds } from "@/lib/gradebook.server";
 import { notifyBlueprintStatusChange } from "@/lib/email";
 
 // Coordinator: update blueprint status (approve/reject)
@@ -8,7 +9,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const coordinator = await getCoordinatorFromCookies();
+  const coordinator = await getVerifiedCoordinator();
   if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { token } = await params;
@@ -18,10 +19,10 @@ export async function POST(
     return NextResponse.json({ error: "Status must be APPROVED or NEEDS_REVISION" }, { status: 400 });
   }
 
-  // Find by id or accessToken
-  let blueprint = await prisma.blueprint.findUnique({ where: { id: token } });
+  const majorIds = await getCoordinatorMajorIds(coordinator);
+  let blueprint = await prisma.blueprint.findFirst({ where: { id: token, course: { majorId: { in: majorIds } } } });
   if (!blueprint) {
-    blueprint = await prisma.blueprint.findUnique({ where: { accessToken: token } });
+    blueprint = await prisma.blueprint.findFirst({ where: { accessToken: token, course: { majorId: { in: majorIds } } } });
   }
   if (!blueprint) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

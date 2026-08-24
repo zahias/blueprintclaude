@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminFromCookies } from "@/lib/auth";
+import { getVerifiedAdmin } from "@/lib/session.server";
 import { hashPassword } from "@/lib/coordinatorAuth";
 
 export async function PUT(
@@ -8,7 +8,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await getAdminFromCookies();
+    const admin = await getVerifiedAdmin();
     if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
@@ -36,7 +36,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const admin = await getAdminFromCookies();
+  const admin = await getVerifiedAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;

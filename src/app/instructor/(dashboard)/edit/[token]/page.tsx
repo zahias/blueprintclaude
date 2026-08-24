@@ -2,10 +2,13 @@
 
 import { useEffect, useState, use, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import TopicBuilder from "@/components/TopicBuilder";
+import BlueprintBloomMatrix from "@/components/BlueprintBloomMatrix";
+import BlueprintTopicSelector from "@/components/BlueprintTopicSelector";
 import QADashboard from "@/components/QADashboard";
-import { SEMESTERS, getAcademicYears, BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS } from "@/lib/constants";
+import { BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS } from "@/lib/constants";
 import { type BlueprintTopicEntry, getSubmitIssues } from "@/lib/types";
+
+const EXAM_TYPES = ["Midterm", "Final", "Major Exam"] as const;
 
 interface Comment {
   id: string;
@@ -41,8 +44,6 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
   const [los, setLos] = useState<LO[]>([]);
 
   const [title, setTitle] = useState("");
-  const [examDate, setExamDate] = useState("");
-  const [duration, setDuration] = useState("");
   const [totalMarks, setTotalMarks] = useState("");
   const [semester, setSemester] = useState("");
   const [academicYear, setAcademicYear] = useState("");
@@ -59,8 +60,6 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
   const [showMobileQA, setShowMobileQA] = useState(false);
   const dirtyRef = useRef(false);
 
-  const academicYears = getAcademicYears();
-
   // Load blueprint data
   useEffect(() => {
     async function load() {
@@ -72,8 +71,6 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
       const bp = await res.json();
 
       setTitle(bp.title);
-      setExamDate(bp.examDate ? bp.examDate.split("T")[0] : "");
-      setDuration(bp.duration?.toString() || "");
       setTotalMarks(bp.totalMarks.toString());
       setSemester(bp.semester || "");
       setAcademicYear(bp.academicYear || "");
@@ -82,10 +79,17 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
       setCourseId(bp.courseId);
       setComments(bp.comments || []);
 
-      // Load course topics and LOs
+      const courseParams = new URLSearchParams();
+      if (bp.semester && bp.academicYear) {
+        courseParams.set("semester", bp.semester);
+        courseParams.set("academicYear", bp.academicYear);
+      }
+      const courseSuffix = courseParams.toString() ? `?${courseParams.toString()}` : "";
+
+      // Load course topics and LOs for the blueprint's semester context
       const [topicsRes, losRes] = await Promise.all([
-        fetch(`/api/courses/${bp.courseId}/topics`).then((r) => r.json()),
-        fetch(`/api/courses/${bp.courseId}/los`).then((r) => r.json()),
+        fetch(`/api/courses/${bp.courseId}/topics${courseSuffix}`).then((r) => r.json()),
+        fetch(`/api/courses/${bp.courseId}/los${courseSuffix}`).then((r) => r.json()),
       ]);
       setTopics(topicsRes);
       setLos(losRes);
@@ -101,7 +105,6 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
         bloomAnalyze: number;
         bloomEvaluate: number;
         bloomCreate: number;
-        questionTypes: { questionType: string; count: number }[];
       }) => ({
         topicId: bt.topicId,
         questionCount: bt.questionCount,
@@ -112,10 +115,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
         bloomAnalyze: bt.bloomAnalyze,
         bloomEvaluate: bt.bloomEvaluate,
         bloomCreate: bt.bloomCreate,
-        questionTypes: bt.questionTypes.map((qt: { questionType: string; count: number }) => ({
-          questionType: qt.questionType,
-          count: qt.count,
-        })),
+        bloomPreset: "CUSTOM",
       }));
       setTopicEntries(entries);
       setLoading(false);
@@ -138,13 +138,12 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             learningOutcome: { code: tl.learningOutcome.code },
           })) || [],
         },
-        questionTypes: te.questionTypes,
       };
     }),
   };
 
   // Validation
-  const totalPointsCalc = topicEntries.reduce((s, te) => s + te.totalPoints, 0);
+  const matrixQuestionTotal = topicEntries.reduce((s, te) => s + te.questionCount, 0);
   const examTotalCalc = parseFloat(totalMarks) || 0;
   const submitIssues = getSubmitIssues(topicEntries, topics, examTotalCalc);
   const canSubmit = submitIssues.length === 0;
@@ -152,6 +151,10 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
   const handleSave = useCallback(async (newStatus: "DRAFT" | "SUBMITTED") => {
     setSaving(true);
     try {
+      const normalizedEntries = topicEntries.map((entry) => ({
+        ...entry,
+        totalPoints: entry.questionCount,
+      }));
       const res = await fetch(`/api/blueprints/${token}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -159,12 +162,12 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
           courseId,
           instructorName,
           title,
-          examDate: examDate || null,
-          duration: duration ? parseInt(duration) : null,
+          examDate: null,
+          duration: null,
           totalMarks,
           semester: semester || null,
           academicYear: academicYear || null,
-          topics: topicEntries,
+          topics: normalizedEntries,
           status: newStatus,
         }),
       });
@@ -181,7 +184,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
     } finally {
       setSaving(false);
     }
-  }, [token, courseId, instructorName, title, examDate, duration, totalMarks, semester, academicYear, topicEntries, router]);
+  }, [token, courseId, instructorName, title, totalMarks, semester, academicYear, topicEntries, router]);
 
   // Auto-save every 30 seconds when dirty + editable
   useEffect(() => {
@@ -212,12 +215,12 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${BLUEPRINT_STATUS_COLORS[status]}`}>
               {BLUEPRINT_STATUS_LABELS[status]}
             </span>
-            <span className="text-sm text-gray-500">{title} • {totalMarks} marks</span>
+            <span className="text-sm text-gray-500">{title} • {totalMarks} questions</span>
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          <span className={`text-sm font-medium ${totalPointsCalc === examTotalCalc ? "text-green-600" : "text-amber-600"}`}>
-            {totalPointsCalc} / {examTotalCalc} pts
+          <span className={`text-sm font-medium ${matrixQuestionTotal === examTotalCalc ? "text-green-600" : "text-amber-600"}`}>
+            {matrixQuestionTotal} / {examTotalCalc} questions
           </span>
           {saved && <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Saved!</span>}
           {autoSaved && <span className="text-xs text-gray-400">Auto-saved</span>}
@@ -279,42 +282,36 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
 
       {/* Metadata row */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Title</label>
-            <input
+            <label className="block text-xs font-medium text-gray-500 mb-1">Exam Type</label>
+            <select
               value={title}
               onChange={(e) => { setTitle(e.target.value); dirtyRef.current = true; }}
               disabled={!canEdit}
               className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
-            />
+            >
+              <option value="">Select type</option>
+              {title && !EXAM_TYPES.includes(title as (typeof EXAM_TYPES)[number]) && (
+                <option value={title}>{title}</option>
+              )}
+              {EXAM_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Semester</label>
-            <select
-              value={semester}
-              onChange={(e) => { setSemester(e.target.value); dirtyRef.current = true; }}
-              disabled={!canEdit}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
-            >
-              <option value="">—</option>
-              {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
+            <div className="w-full rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-700">
+              {semester || "-"}
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
-            <select
-              value={academicYear}
-              onChange={(e) => { setAcademicYear(e.target.value); dirtyRef.current = true; }}
-              disabled={!canEdit}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
-            >
-              <option value="">—</option>
-              {academicYears.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
+            <div className="w-full rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-700">
+              {academicYear || "-"}
+            </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Total Marks</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Total Questions</label>
             <input
               type="number"
               value={totalMarks}
@@ -323,30 +320,18 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
               className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm disabled:bg-gray-50"
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Duration</label>
-            <div className="relative">
-              <input
-                type="number"
-                value={duration}
-                onChange={(e) => { setDuration(e.target.value); dirtyRef.current = true; }}
-                disabled={!canEdit}
-                className="w-full px-2 py-1.5 pr-10 border border-gray-300 rounded text-sm disabled:bg-gray-50"
-              />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">min</span>
-            </div>
-          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2">
           {canEdit ? (
-            <TopicBuilder topics={topics} entries={topicEntries} onChange={(entries) => { setTopicEntries(entries); dirtyRef.current = true; }} />
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 p-6 text-gray-500 text-sm">
-              Topic editing is disabled for {(BLUEPRINT_STATUS_LABELS[status] || status).toLowerCase()} blueprints.
+            <div className="space-y-5">
+              <BlueprintTopicSelector topics={topics} entries={topicEntries} onChange={(entries) => { setTopicEntries(entries); dirtyRef.current = true; }} />
+              <BlueprintBloomMatrix topics={topics} entries={topicEntries} onChange={(entries) => { setTopicEntries(entries); dirtyRef.current = true; }} />
             </div>
+          ) : (
+            <BlueprintBloomMatrix topics={topics} entries={topicEntries} onChange={() => undefined} disabled />
           )}
         </div>
         <div className="xl:col-span-1">

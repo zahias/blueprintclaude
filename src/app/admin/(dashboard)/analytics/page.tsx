@@ -1,489 +1,858 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  Legend, CartesianGrid, Cell,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
-import { BLOOM_LEVELS, SEMESTERS, getAcademicYears } from "@/lib/constants";
+import GradeDistributionChart from "@/components/GradeDistributionChart";
+import { BLOOM_LEVELS } from "@/lib/constants";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+interface TermInfo {
+  id: string;
+  semester: string;
+  academicYear: string;
+}
 
-interface LODetail { id: string; code: string; description: string; covered: boolean }
-interface TopicDetail { id: string; name: string; covered: boolean }
+interface LODetail {
+  id: string;
+  code: string;
+  description: string;
+  covered: boolean;
+  questionCount: number;
+}
+
+interface TopicDetail {
+  id: string;
+  name: string;
+  covered: boolean;
+  questionCount: number;
+}
 
 interface CourseStat {
-  courseId: string; courseCode: string; courseName: string;
-  majorId: string; majorName: string;
-  blueprintCount: number; totalMarks: number; totalQuestions: number;
+  courseId: string;
+  courseOfferingId: string | null;
+  courseCode: string;
+  courseName: string;
+  majorId: string;
+  majorName: string;
+  term: { id: string | null; semester: string | null; academicYear: string | null };
+  blueprintCount: number;
+  blueprintQuestions: number;
+  totalQuestions: number;
   bloom: Record<string, number>;
-  hotPercent: number; lotPercent: number;
-  qTypes: Record<string, number>;
+  questionFormats: {
+    closedEndedQuestions: number;
+    openEndedQuestions: number;
+    closedEndedQuestionPercent: number;
+    openEndedQuestionPercent: number;
+    closedEndedGradeWeight: number;
+    openEndedGradeWeight: number;
+    closedEndedGradeWeightPercent: number;
+    openEndedGradeWeightPercent: number;
+  };
+  lowOrderThinkingPercent: number;
+  highOrderThinkingPercent: number;
   cloCoverage: { covered: number; total: number; percent: number };
   topicCoverage: { covered: number; total: number; percent: number };
   loDetails: LODetail[];
   topicDetails: TopicDetail[];
 }
 
-interface MajorStat {
-  majorId: string; majorName: string;
-  courseCount: number; blueprintCount: number;
-  avgHOTPercent: number; avgCLOCoverage: number; avgTopicCoverage: number;
+interface ProgramSummary {
+  majorId: string;
+  majorName: string;
+  courseCount: number;
+  blueprintCount: number;
+  totalQuestions: number;
+  avgCLOCoverage: number;
+  avgTopicCoverage: number;
+  avgHighOrderThinking: number;
+  avgOpenEndedQuestions: number;
 }
 
-interface BloomTrendPoint {
-  semester: string; academicYear: string;
-  bloom: Record<string, number>; totalQ: number;
-  hotPercent: number; lotPercent: number;
+interface Overview {
+  courseCount: number;
+  blueprintCount: number;
+  totalQuestions: number;
+  cloGaps: number;
+  topicGaps: number;
+  avgCLOCoverage: number;
+  avgTopicCoverage: number;
+  lowOrderThinkingPercent: number;
+  highOrderThinkingPercent: number;
+  closedEndedQuestionPercent: number;
+  openEndedQuestionPercent: number;
 }
 
-interface QTypeTrendPoint {
-  semester: string; academicYear: string;
-  qTypes: Record<string, number>; totalQ: number;
+interface CourseReportStat {
+  courseOfferingId: string;
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  majorId: string;
+  majorName: string;
+  term: TermInfo;
+  instructorNames: string[];
+  rosterSize: number;
+  reportId: string | null;
+  status: string;
+  answeredResponses: number;
+  totalResponses: number;
+  responseCompletionPercent: number;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  official: boolean;
 }
 
-interface FilterOption { id: string; name: string; code?: string; majorId?: string }
+interface CourseReportOverview {
+  offeringCount: number;
+  approvedReports: number;
+  missingApprovedReports: number;
+  pendingReports: number;
+  needsRevisionReports: number;
+  draftReports: number;
+  notStartedReports: number;
+  avgResponseCompletion: number;
+}
+
+interface CourseReportProgramSummary {
+  majorId: string;
+  majorName: string;
+  courses: number;
+  approvedReports: number;
+  pendingReports: number;
+  needsRevisionReports: number;
+  missingApprovedReports: number;
+  avgResponseCompletion: number;
+}
+
+interface TrendPoint {
+  key: string;
+  termId: string | null;
+  semester: string | null;
+  academicYear: string | null;
+  label: string;
+  blueprintCount: number;
+  totalQuestions: number;
+  cloCoveragePercent: number;
+  topicCoveragePercent: number;
+  lowOrderThinkingPercent: number;
+  highOrderThinkingPercent: number;
+}
+
+interface FilterOption {
+  id: string;
+  name: string;
+  code?: string;
+  majorId?: string;
+}
 
 interface AnalyticsData {
+  activeTerm: TermInfo | null;
+  selectedTerm: TermInfo | null;
+  terms: TermInfo[];
   courseStats: CourseStat[];
-  majorStats: MajorStat[];
-  bloomTrend: BloomTrendPoint[];
-  qTypeTrend: QTypeTrendPoint[];
+  programSummary: ProgramSummary[];
+  overview: Overview;
+  courseReportStats: CourseReportStat[];
+  courseReportOverview: CourseReportOverview;
+  courseReportProgramSummary: CourseReportProgramSummary[];
   filters: { majors: FilterOption[]; courses: FilterOption[] };
 }
 
+interface TrendsData {
+  trends: TrendPoint[];
+  filters: { majors: FilterOption[]; courses: FilterOption[] };
+}
+
+interface GradeCourseStat {
+  courseOfferingId: string;
+  courseCode: string;
+  courseName: string;
+  majorId: string;
+  majorName: string;
+  rosterSize: number;
+  approvedAssessments: number;
+  completionPercent: number;
+  failRate: number;
+  stats: { average: number; median: number; highest: number; lowest: number; standardDeviation: number; passCount: number; failCount: number };
+  insights: { severity: string; title: string; detail: string; metricKey: string }[];
+}
+
+interface GradeAnalyticsData {
+  selectedTerm: TermInfo | null;
+  overview: { average: number; median: number; highest: number; lowest: number; standardDeviation: number; passCount: number; failCount: number };
+  percents: number[];
+  courseStats: GradeCourseStat[];
+  majorSummary: { majorId: string; majorName: string; courses: number; students: number; approvedAssessments: number; average: number; failRate: number; completionPercent: number }[];
+  filters: { terms: TermInfo[]; majors: FilterOption[]; courses: FilterOption[] };
+}
+
 const TABS = [
-  "CLO Coverage", "Topic Coverage", "Bloom Trend",
-  "Q-Type Trend", "Assessment Load", "Major Comparison",
+  "Current Term Overview",
+  "CLO Coverage",
+  "Topic Coverage",
+  "Bloom Balance",
+  "Question Formats",
+  "Trends",
+  "Program Summary",
+  "Course Reports",
+  "Grade Analytics",
 ] as const;
-
-const QTYPE_COLORS: Record<string, string> = {
-  MCQ: "#6366f1", SHORT_ANSWER: "#f59e0b", ESSAY: "#10b981",
-  TRUE_FALSE: "#ef4444", PROBLEM_SOLVING: "#8b5cf6",
-};
-const QTYPE_LABELS: Record<string, string> = {
-  MCQ: "MCQ", SHORT_ANSWER: "Short Answer", ESSAY: "Essay",
-  TRUE_FALSE: "True/False", PROBLEM_SOLVING: "Problem Solving",
-};
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [trendsData, setTrendsData] = useState<TrendsData | null>(null);
+  const [gradeData, setGradeData] = useState<GradeAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<typeof TABS[number]>("CLO Coverage");
-
-  // Filters
+  const [trendsLoading, setTrendsLoading] = useState(false);
+  const [gradesLoading, setGradesLoading] = useState(false);
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Current Term Overview");
   const [majorId, setMajorId] = useState("");
-  const [semester, setSemester] = useState("");
-  const [academicYear, setAcademicYear] = useState("");
   const [courseId, setCourseId] = useState("");
-
-  // Expansion
+  const [termId, setTermId] = useState("");
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
+  const [exportError, setExportError] = useState("");
 
-  const academicYears = getAcademicYears();
+  const selectedMajor = useMemo(
+    () => data?.filters.majors.find((major) => major.id === majorId),
+    [data, majorId]
+  );
+
+  const filteredCourses = data?.filters.courses.filter((course) => !majorId || course.majorId === majorId) || [];
 
   const loadData = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (majorId) params.set("majorId", majorId);
-    if (semester) params.set("semester", semester);
-    if (academicYear) params.set("academicYear", academicYear);
     if (courseId) params.set("courseId", courseId);
+    if (termId) params.set("termId", termId);
     const res = await fetch(`/api/admin/analytics?${params.toString()}`);
     if (res.ok) setData(await res.json());
     setLoading(false);
-  }, [majorId, semester, academicYear, courseId]);
+  }, [majorId, courseId, termId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const loadTrends = useCallback(async () => {
+    setTrendsLoading(true);
+    const params = new URLSearchParams({ view: "trends" });
+    if (majorId) params.set("majorId", majorId);
+    if (courseId) params.set("courseId", courseId);
+    const res = await fetch(`/api/admin/analytics?${params.toString()}`);
+    if (res.ok) setTrendsData(await res.json());
+    setTrendsLoading(false);
+  }, [majorId, courseId]);
 
-  // Filtered courses for dropdown (based on major)
-  const filteredCourses = data?.filters.courses.filter(
-    (c) => !majorId || c.majorId === majorId
-  ) || [];
+  const loadGradeData = useCallback(async () => {
+    setGradesLoading(true);
+    const params = new URLSearchParams();
+    if (majorId) params.set("majorId", majorId);
+    if (courseId) params.set("courseId", courseId);
+    if (termId) params.set("termId", termId);
+    const res = await fetch(`/api/admin/grade-analytics?${params.toString()}`);
+    if (res.ok) setGradeData(await res.json());
+    setGradesLoading(false);
+  }, [majorId, courseId, termId]);
 
-  // Reset courseId if major changes and course doesn't belong to it
   useEffect(() => {
-    if (majorId && courseId) {
-      const belongs = filteredCourses.some((c) => c.id === courseId);
-      if (!belongs) setCourseId("");
+    loadData();
+    loadTrends();
+    loadGradeData();
+  }, [loadData, loadTrends, loadGradeData]);
+
+  useEffect(() => {
+    if (majorId && courseId && !filteredCourses.some((course) => course.id === courseId)) {
+      setCourseId("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [majorId]);
 
-  // ─── Render helpers ─────────────────────────────────────────────────────────
+  async function exportMajorReport() {
+    setExportError("");
+    if (!majorId || !selectedMajor || !data) {
+      setExportError("Select a major before exporting a report.");
+      return;
+    }
+
+    const majorCourses = data.courseStats.filter((course) => course.majorId === majorId);
+    const majorCourseReports = data.courseReportStats.filter((report) => report.majorId === majorId);
+    const summary = data.programSummary.find((major) => major.majorId === majorId);
+    const reportSummary = data.courseReportProgramSummary.find((major) => major.majorId === majorId);
+    const { jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF();
+    const term = data.selectedTerm ? `${data.selectedTerm.semester} ${data.selectedTerm.academicYear}` : "No active term";
+
+    doc.setFillColor(79, 70, 229);
+    doc.rect(0, 0, 210, 35, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.text("Program Blueprint Analytics Report", 14, 16);
+    doc.setFontSize(11);
+    doc.text(`${selectedMajor.name} | ${term}`, 14, 25);
+    doc.setTextColor(31, 41, 55);
+
+    doc.setFontSize(10);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 44);
+    doc.text(`Approved blueprints only. CLO question counts use split allocation for multi-CLO topics.`, 14, 51);
+
+    autoTable(doc, {
+      startY: 60,
+      head: [["Courses", "Blueprints", "Questions", "Avg CLO Coverage", "Avg Topic Coverage", "Avg High Order Thinking"]],
+      body: [[
+        summary?.courseCount ?? 0,
+        summary?.blueprintCount ?? 0,
+        summary?.totalQuestions ?? 0,
+        `${summary?.avgCLOCoverage ?? 0}%`,
+        `${summary?.avgTopicCoverage ?? 0}%`,
+        `${summary?.avgHighOrderThinking ?? 0}%`,
+      ]],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [79, 70, 229] },
+    });
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Course", "Blueprints", "Questions", "CLO Coverage", "Topic Coverage", "Low Order", "High Order"]],
+      body: majorCourses.map((course) => [
+        `${course.courseCode} - ${course.courseName}`,
+        course.blueprintCount,
+        course.totalQuestions,
+        `${course.cloCoverage.covered}/${course.cloCoverage.total} (${course.cloCoverage.percent}%)`,
+        `${course.topicCoverage.covered}/${course.topicCoverage.total} (${course.topicCoverage.percent}%)`,
+        `${course.lowOrderThinkingPercent}%`,
+        `${course.highOrderThinkingPercent}%`,
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [17, 24, 39] },
+    });
+
+    const gapRows = majorCourses
+      .flatMap((course) => [
+        ...course.loDetails.filter((lo) => !lo.covered).map((lo) => [`${course.courseCode}`, "CLO", lo.code, lo.description]),
+        ...course.topicDetails.filter((topic) => !topic.covered).map((topic) => [`${course.courseCode}`, "Topic", topic.name, "Not covered in approved blueprints"]),
+      ])
+      .slice(0, 40);
+
+    if (gapRows.length > 0) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 10,
+        head: [["Course", "Gap Type", "Item", "Details"]],
+        body: gapRows,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [220, 38, 38] },
+      });
+    }
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Course Progress Reports", "Approved", "Pending", "Needs Revision", "Missing Approved", "Avg Completion"]],
+      body: [[
+        reportSummary?.courses ?? 0,
+        reportSummary?.approvedReports ?? 0,
+        reportSummary?.pendingReports ?? 0,
+        reportSummary?.needsRevisionReports ?? 0,
+        reportSummary?.missingApprovedReports ?? 0,
+        `${reportSummary?.avgResponseCompletion ?? 0}%`,
+      ]],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [15, 118, 110] },
+    });
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Course", "Instructor", "Status", "Roster", "Responses", "Submitted", "Reviewed"]],
+      body: majorCourseReports.map((report) => [
+        `${report.courseCode} - ${report.courseName}`,
+        report.instructorNames.join(", ") || "Unassigned",
+        report.status.replace("_", " "),
+        report.rosterSize,
+        `${report.answeredResponses}/${report.totalResponses} (${report.responseCompletionPercent}%)`,
+        report.submittedAt ? new Date(report.submittedAt).toLocaleDateString() : "-",
+        report.reviewedAt ? new Date(report.reviewedAt).toLocaleDateString() : "-",
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [17, 24, 39] },
+    });
+
+    const fileName = `analytics-${selectedMajor.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${term.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf`;
+    doc.save(fileName);
+  }
 
   function renderFilters() {
     return (
-      <div className="flex flex-wrap gap-3 mb-6">
-        <select value={majorId} onChange={(e) => setMajorId(e.target.value)}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white">
-          <option value="">All Majors</option>
-          {data?.filters.majors.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
-        <select value={semester} onChange={(e) => setSemester(e.target.value)}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white">
-          <option value="">All Semesters</option>
-          {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
-        <select value={academicYear} onChange={(e) => setAcademicYear(e.target.value)}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white">
-          <option value="">All Years</option>
-          {academicYears.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select value={courseId} onChange={(e) => setCourseId(e.target.value)}
-          className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white">
-          <option value="">All Courses</option>
-          {filteredCourses.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
-        </select>
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-lg bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700">
+            Showing {data?.selectedTerm ? `${data.selectedTerm.semester} ${data.selectedTerm.academicYear}` : "No active term"}
+          </div>
+          <select
+            value={termId}
+            onChange={(event) => setTermId(event.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">Active Term</option>
+            {data?.terms.map((term) => (
+              <option key={term.id} value={term.id}>{term.semester} {term.academicYear}</option>
+            ))}
+          </select>
+          <select
+            value={majorId}
+            onChange={(event) => {
+              setMajorId(event.target.value);
+              setExportError("");
+            }}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">All Majors</option>
+            {data?.filters.majors.map((major) => (
+              <option key={major.id} value={major.id}>{major.name}</option>
+            ))}
+          </select>
+          <select
+            value={courseId}
+            onChange={(event) => setCourseId(event.target.value)}
+            className="min-w-64 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">All Courses</option>
+            {filteredCourses.map((course) => (
+              <option key={course.id} value={course.id}>{course.code} - {course.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={exportMajorReport}
+            className="ml-auto rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            Export Major Report
+          </button>
+        </div>
+        {exportError && <p className="mt-2 text-xs text-red-600">{exportError}</p>}
       </div>
     );
   }
 
   function renderTabs() {
     return (
-      <div className="flex flex-wrap gap-1 mb-6 border-b border-gray-200 pb-2">
-        {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
-              tab === t ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"
-            }`}>
-            {t}
+      <div className="mb-6 flex flex-wrap gap-1 border-b border-gray-200 pb-2">
+        {TABS.map((item) => (
+          <button
+            key={item}
+            onClick={() => setTab(item)}
+            className={`rounded-t-lg px-3 py-1.5 text-xs font-medium transition ${
+              tab === item ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {item === "Trends" ? "View Trends" : item}
           </button>
         ))}
       </div>
     );
   }
 
-  // ─── TAB 1: CLO Coverage Gaps ─────────────────────────────────────────────
+  function renderOverview() {
+    const courses = data?.courseStats || [];
+    const overview = data?.overview;
+    if (!overview || courses.length === 0) return <EmptyState />;
+    const riskyCourses = courses.filter(
+      (course) => course.cloCoverage.percent < 100 || course.topicCoverage.percent < 100
+    );
+
+    return (
+      <div className="space-y-6">
+        <div className="grid gap-3 md:grid-cols-4">
+          <MetricCard label="Courses Analyzed" value={overview.courseCount} />
+          <MetricCard label="Approved Blueprints" value={overview.blueprintCount} />
+          <MetricCard label="Exam Questions" value={overview.totalQuestions} />
+          <MetricCard label="High Order Thinking" value={`${overview.highOrderThinkingPercent}%`} />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <h2 className="mb-4 text-sm font-semibold text-gray-900">Readiness Signals</h2>
+            <div className="space-y-4">
+              <ReadinessRow label="Average CLO coverage" value={overview.avgCLOCoverage} />
+              <ReadinessRow label="Average topic coverage" value={overview.avgTopicCoverage} />
+              <ReadinessRow label="Low Order Thinking" value={overview.lowOrderThinkingPercent} neutral />
+              <ReadinessRow label="High Order Thinking" value={overview.highOrderThinkingPercent} neutral />
+              <ReadinessRow label="Open-ended questions" value={overview.openEndedQuestionPercent} neutral />
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-5">
+            <h2 className="mb-4 text-sm font-semibold text-gray-900">Coverage Alerts</h2>
+            {riskyCourses.length === 0 ? (
+              <p className="text-sm text-green-700">All analyzed courses have complete CLO and topic coverage.</p>
+            ) : (
+              <div className="space-y-2">
+                {riskyCourses.slice(0, 6).map((course) => (
+                  <div key={course.courseOfferingId || course.courseId} className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    <span className="font-semibold">{course.courseCode}</span> has {course.cloCoverage.total - course.cloCoverage.covered} CLO gap(s) and {course.topicCoverage.total - course.topicCoverage.covered} topic gap(s).
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <CourseReadinessTable courses={courses} />
+      </div>
+    );
+  }
 
   function renderCLOCoverage() {
     const courses = data?.courseStats || [];
     if (courses.length === 0) return <EmptyState />;
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Course</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Total CLOs</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Covered</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Gaps</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Coverage %</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {courses.map((c) => {
-              const gaps = c.cloCoverage.total - c.cloCoverage.covered;
-              const hasGaps = gaps > 0;
-              const expanded = expandedCourse === c.courseId;
-              return (
-                <tbody key={c.courseId}>
-                  <tr className={hasGaps ? "bg-red-50" : "hover:bg-gray-50"}>
-                    <td className="px-4 py-3 font-medium text-gray-900">{c.courseCode} — {c.courseName}</td>
-                    <td className="px-4 py-3 text-center">{c.cloCoverage.total}</td>
-                    <td className="px-4 py-3 text-center text-green-700 font-medium">{c.cloCoverage.covered}</td>
-                    <td className="px-4 py-3 text-center">
-                      {hasGaps ? <span className="text-red-600 font-semibold">{gaps}</span> : <span className="text-green-600">0</span>}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <CoverageBar percent={c.cloCoverage.percent} />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => setExpandedCourse(expanded ? null : c.courseId)}
-                        className="text-xs text-indigo-600 hover:text-indigo-800">{expanded ? "Hide" : "Details"}</button>
-                    </td>
-                  </tr>
-                  {expanded && (
-                    <tr>
-                      <td colSpan={6} className="px-8 py-3 bg-gray-50">
-                        <div className="space-y-1">
-                          {c.loDetails.map((lo) => (
-                            <div key={lo.id} className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${lo.covered ? "text-green-700" : "text-red-600 bg-red-50"}`}>
-                              <span>{lo.covered ? "✓" : "✗"}</span>
-                              <span className="font-mono font-semibold">{lo.code}</span>
-                              <span className="text-gray-600">{lo.description}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <CoverageTable
+        courses={courses}
+        type="clo"
+        expandedCourse={expandedCourse}
+        setExpandedCourse={setExpandedCourse}
+      />
     );
   }
-
-  // ─── TAB 2: Topic Coverage Gaps ───────────────────────────────────────────
 
   function renderTopicCoverage() {
     const courses = data?.courseStats || [];
     if (courses.length === 0) return <EmptyState />;
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <CoverageTable
+        courses={courses}
+        type="topic"
+        expandedCourse={expandedCourse}
+        setExpandedCourse={setExpandedCourse}
+      />
+    );
+  }
+
+  function renderBloomBalance() {
+    const courses = data?.courseStats || [];
+    if (courses.length === 0) return <EmptyState />;
+    const chartData = courses.map((course) => ({
+      course: course.courseCode,
+      "Low Order Thinking": course.lowOrderThinkingPercent,
+      "High Order Thinking": course.highOrderThinkingPercent,
+    }));
+
+    return (
+      <div className="space-y-6">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="mb-4 text-sm font-semibold text-gray-900">Cognitive Balance by Course</h2>
+          <ResponsiveContainer width="100%" height={Math.max(260, courses.length * 44)}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="course" width={70} tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="Low Order Thinking" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="High Order Thinking" fill="#4f46e5" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Course</th>
+                {BLOOM_LEVELS.map((level) => (
+                  <th key={level.key} className="px-3 py-3 text-center font-medium text-gray-500">{level.label}</th>
+                ))}
+                <th className="px-3 py-3 text-center font-medium text-gray-500">Low Order Thinking</th>
+                <th className="px-3 py-3 text-center font-medium text-gray-500">High Order Thinking</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {courses.map((course) => (
+                <tr key={course.courseOfferingId || course.courseId} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{course.courseCode}</td>
+                  {BLOOM_LEVELS.map((level) => (
+                    <td key={level.key} className="px-3 py-3 text-center">{course.bloom[level.key] || 0}</td>
+                  ))}
+                  <td className="px-3 py-3 text-center text-amber-700 font-medium">{course.lowOrderThinkingPercent}%</td>
+                  <td className="px-3 py-3 text-center text-indigo-700 font-medium">{course.highOrderThinkingPercent}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  function renderQuestionFormats() {
+    const courses = data?.courseStats || [];
+    if (courses.length === 0) return <EmptyState />;
+    const chartData = courses.map((course) => ({
+      course: course.courseCode,
+      "Closed-ended": course.questionFormats.closedEndedQuestionPercent,
+      "Open-ended": course.questionFormats.openEndedQuestionPercent,
+    }));
+    const flaggedCourses = courses.filter((course) =>
+      course.questionFormats.closedEndedQuestionPercent >= 80 ||
+      course.questionFormats.openEndedQuestionPercent < 20 ||
+      course.questionFormats.closedEndedGradeWeightPercent >= 75
+    );
+
+    return (
+      <div className="space-y-6">
+        <div className="grid gap-3 md:grid-cols-3">
+          <MetricCard label="Open-ended Questions" value={`${data?.overview.openEndedQuestionPercent ?? 0}%`} />
+          <MetricCard label="Closed-ended Questions" value={`${data?.overview.closedEndedQuestionPercent ?? 0}%`} />
+          <MetricCard label="Courses Flagged" value={flaggedCourses.length} />
+        </div>
+        {flaggedCourses.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+            <h2 className="text-sm font-semibold text-amber-900">Question Format Balance Alerts</h2>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {flaggedCourses.slice(0, 8).map((course) => (
+                <div key={course.courseOfferingId || course.courseId} className="rounded-lg bg-white/75 px-3 py-2 text-sm text-amber-900">
+                  <span className="font-semibold">{course.courseCode}</span>: {course.questionFormats.closedEndedQuestionPercent}% closed-ended questions, {course.questionFormats.closedEndedGradeWeightPercent}% closed-ended grade weight.
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="mb-4 text-sm font-semibold text-gray-900">Question Format Mix by Course</h2>
+          <ResponsiveContainer width="100%" height={Math.max(260, courses.length * 44)}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="course" width={70} tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="Closed-ended" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="Open-ended" fill="#6366f1" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Course</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Closed-ended Qs</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Open-ended Qs</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Closed-ended Weight</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Open-ended Weight</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {courses.map((course) => (
+                <tr key={course.courseOfferingId || course.courseId} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-900">{course.courseCode}</p>
+                    <p className="text-xs text-gray-400">{course.courseName}</p>
+                  </td>
+                  <td className="px-4 py-3 text-center">{course.questionFormats.closedEndedQuestions} ({course.questionFormats.closedEndedQuestionPercent}%)</td>
+                  <td className="px-4 py-3 text-center">{course.questionFormats.openEndedQuestions} ({course.questionFormats.openEndedQuestionPercent}%)</td>
+                  <td className="px-4 py-3 text-center">{course.questionFormats.closedEndedGradeWeightPercent}%</td>
+                  <td className="px-4 py-3 text-center">{course.questionFormats.openEndedGradeWeightPercent}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  function renderTrends() {
+    const trends = trendsData?.trends || [];
+    if (trendsLoading) return <div className="py-12 text-center text-sm text-gray-500">Loading trends...</div>;
+    if (trends.length === 0) return <EmptyState msg="No historical approved blueprints are available for the selected scope." />;
+
+    return (
+      <div className="space-y-6">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-gray-900">Coverage Trends</h2>
+            <p className="text-xs text-gray-500">
+              {courseId ? "Course-level drilldown across terms." : "Major-level trend across terms. Select a course for drilldown."}
+            </p>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={trends}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="cloCoveragePercent" name="CLO Coverage" stroke="#22c55e" strokeWidth={2} />
+              <Line type="monotone" dataKey="topicCoveragePercent" name="Topic Coverage" stroke="#f59e0b" strokeWidth={2} />
+              <Line type="monotone" dataKey="highOrderThinkingPercent" name="High Order Thinking" stroke="#4f46e5" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Term</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Blueprints</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Questions</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">CLO Coverage</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Topic Coverage</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">High Order Thinking</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {trends.map((point) => (
+                <tr key={point.key} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{point.label}</td>
+                  <td className="px-4 py-3 text-center">{point.blueprintCount}</td>
+                  <td className="px-4 py-3 text-center">{point.totalQuestions}</td>
+                  <td className="px-4 py-3 text-center">{point.cloCoveragePercent}%</td>
+                  <td className="px-4 py-3 text-center">{point.topicCoveragePercent}%</td>
+                  <td className="px-4 py-3 text-center">{point.highOrderThinkingPercent}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  function renderProgramSummary() {
+    const majors = data?.programSummary || [];
+    if (majors.length === 0) return <EmptyState msg="No approved blueprints to summarize." />;
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="border-b border-gray-200 bg-gray-50">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Course</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Total Topics</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Included</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Missing</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500">Coverage %</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500" />
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Major</th>
+              <th className="px-4 py-3 text-center font-medium text-gray-500">Courses</th>
+              <th className="px-4 py-3 text-center font-medium text-gray-500">Blueprints</th>
+              <th className="px-4 py-3 text-center font-medium text-gray-500">Questions</th>
+              <th className="px-4 py-3 text-center font-medium text-gray-500">Avg CLO Coverage</th>
+              <th className="px-4 py-3 text-center font-medium text-gray-500">Avg Topic Coverage</th>
+              <th className="px-4 py-3 text-center font-medium text-gray-500">Avg High Order Thinking</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {courses.map((c) => {
-              const missing = c.topicCoverage.total - c.topicCoverage.covered;
-              const hasMissing = missing > 0;
-              const expanded = expandedCourse === `topic-${c.courseId}`;
-              return (
-                <tbody key={c.courseId}>
-                  <tr className={hasMissing ? "bg-amber-50" : "hover:bg-gray-50"}>
-                    <td className="px-4 py-3 font-medium text-gray-900">{c.courseCode} — {c.courseName}</td>
-                    <td className="px-4 py-3 text-center">{c.topicCoverage.total}</td>
-                    <td className="px-4 py-3 text-center text-green-700 font-medium">{c.topicCoverage.covered}</td>
-                    <td className="px-4 py-3 text-center">
-                      {hasMissing ? <span className="text-amber-600 font-semibold">{missing}</span> : <span className="text-green-600">0</span>}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <CoverageBar percent={c.topicCoverage.percent} />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => setExpandedCourse(expanded ? null : `topic-${c.courseId}`)}
-                        className="text-xs text-indigo-600 hover:text-indigo-800">{expanded ? "Hide" : "Details"}</button>
-                    </td>
-                  </tr>
-                  {expanded && (
-                    <tr>
-                      <td colSpan={6} className="px-8 py-3 bg-gray-50">
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
-                          {c.topicDetails.map((t) => (
-                            <div key={t.id} className={`text-xs px-2 py-1 rounded ${t.covered ? "text-green-700" : "text-amber-700 bg-amber-50"}`}>
-                              {t.covered ? "✓" : "✗"} {t.name}
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              );
-            })}
+            {majors.map((major) => (
+              <tr key={major.majorId} className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium text-gray-900">{major.majorName}</td>
+                <td className="px-4 py-3 text-center">{major.courseCount}</td>
+                <td className="px-4 py-3 text-center">{major.blueprintCount}</td>
+                <td className="px-4 py-3 text-center">{major.totalQuestions}</td>
+                <td className="px-4 py-3 text-center"><CoverageBar percent={major.avgCLOCoverage} /></td>
+                <td className="px-4 py-3 text-center"><CoverageBar percent={major.avgTopicCoverage} /></td>
+                <td className="px-4 py-3 text-center text-indigo-700 font-medium">{major.avgHighOrderThinking}%</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
     );
   }
 
-  // ─── TAB 3: Bloom Trend Over Time ─────────────────────────────────────────
+  function renderCourseReports() {
+    const reports = data?.courseReportStats || [];
+    const overview = data?.courseReportOverview;
+    const majors = data?.courseReportProgramSummary || [];
+    if (!overview || reports.length === 0) {
+      return <EmptyState msg="No active-term course offerings are available for course report analytics." />;
+    }
 
-  function renderBloomTrend() {
-    const trend = data?.bloomTrend || [];
-    if (!courseId) return <PromptCourseSelection />;
-    if (trend.length === 0) return <EmptyState msg="No trend data for this course (needs approved blueprints with semester info)." />;
-
-    const chartData = trend.map((t) => {
-      const total = Object.values(t.bloom).reduce((s, v) => s + v, 0);
-      const row: Record<string, string | number> = { label: `${t.semester} ${t.academicYear}` };
-      BLOOM_LEVELS.forEach((b) => {
-        row[b.label] = total > 0 ? Math.round(((t.bloom[b.key] || 0) / total) * 100) : 0;
-      });
-      row["HOT%"] = t.hotPercent;
-      row["LOT%"] = t.lotPercent;
-      return row;
-    });
+    const attentionRows = reports.filter((report) => report.status !== "APPROVED");
 
     return (
       <div className="space-y-6">
-        {/* Bloom distribution lines */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Bloom&apos;s Level % Over Semesters</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} unit="%" />
-              <Tooltip />
-              <Legend />
-              {BLOOM_LEVELS.map((b) => (
-                <Line key={b.key} type="monotone" dataKey={b.label} stroke={b.color} strokeWidth={2} dot={{ r: 4 }} />
+        <div className="grid gap-3 md:grid-cols-5">
+          <MetricCard label="Course Offerings" value={overview.offeringCount} />
+          <MetricCard label="Approved Reports" value={overview.approvedReports} />
+          <MetricCard label="Missing Approved" value={overview.missingApprovedReports} />
+          <MetricCard label="Pending Review" value={overview.pendingReports} />
+          <MetricCard label="Avg Completion" value={`${overview.avgResponseCompletion}%`} />
+        </div>
+
+        {attentionRows.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+            <h2 className="text-sm font-semibold text-amber-900">Course Report Follow-up</h2>
+            <p className="mt-1 text-xs text-amber-800">
+              Official reporting should use approved course reports only. These offerings still need submission, revision, or coordinator approval.
+            </p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {attentionRows.slice(0, 8).map((report) => (
+                <div key={report.courseOfferingId} className="rounded-lg bg-white/75 px-3 py-2 text-sm text-amber-900">
+                  <span className="font-semibold">{report.courseCode}</span> is {statusLabel(report.status).toLowerCase()} with {report.answeredResponses}/{report.totalResponses} responses completed.
+                </div>
               ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        {/* HOT vs LOT */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">HOT vs LOT % Over Semesters</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} unit="%" />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="LOT%" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="HOT%" fill="#6366f1" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    );
-  }
+            </div>
+          </div>
+        )}
 
-  // ─── TAB 4: Q-Type Trend ──────────────────────────────────────────────────
-
-  function renderQTypeTrend() {
-    const trend = data?.qTypeTrend || [];
-    if (!courseId) return <PromptCourseSelection />;
-    if (trend.length === 0) return <EmptyState msg="No trend data for this course." />;
-
-    const allTypes = Array.from(new Set(trend.flatMap((t) => Object.keys(t.qTypes))));
-    const chartData = trend.map((t) => {
-      const row: Record<string, string | number> = { label: `${t.semester} ${t.academicYear}` };
-      allTypes.forEach((qt) => { row[QTYPE_LABELS[qt] || qt] = t.qTypes[qt] || 0; });
-      return row;
-    });
-
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Question Type Distribution Over Semesters</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} />
-            <Tooltip />
-            <Legend />
-            {allTypes.map((qt) => (
-              <Bar key={qt} dataKey={QTYPE_LABELS[qt] || qt} stackId="a"
-                fill={QTYPE_COLORS[qt] || "#94a3b8"} />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  }
-
-  // ─── TAB 5: Assessment Load ───────────────────────────────────────────────
-
-  function renderAssessmentLoad() {
-    const courses = data?.courseStats || [];
-    if (courses.length === 0) return <EmptyState />;
-
-    const chartData = courses.map((c) => ({
-      name: c.courseCode,
-      Marks: c.totalMarks,
-      Questions: c.totalQuestions,
-    }));
-
-    return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Assessment Load per Course</h3>
-          <ResponsiveContainer width="100%" height={Math.max(200, courses.length * 50)}>
-            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" tick={{ fontSize: 10 }} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={60} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="Marks" fill="#6366f1" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="Questions" fill="#22c55e" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="border-b border-gray-200 bg-gray-50">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Course</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Blueprints</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Total Marks</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Total Questions</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Qs/Mark Ratio</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Course</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Instructor</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Roster</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Status</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Responses</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Submitted</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Reviewed</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {courses.map((c) => (
-                <tr key={c.courseId} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{c.courseCode} — {c.courseName}</td>
-                  <td className="px-4 py-3 text-center">{c.blueprintCount}</td>
-                  <td className="px-4 py-3 text-center">{c.totalMarks}</td>
-                  <td className="px-4 py-3 text-center">{c.totalQuestions}</td>
-                  <td className="px-4 py-3 text-center font-mono text-xs">
-                    {c.totalMarks > 0 ? (c.totalQuestions / c.totalMarks).toFixed(2) : "—"}
+              {reports.map((report) => (
+                <tr key={report.courseOfferingId} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-900">{report.courseCode}</p>
+                    <p className="text-xs text-gray-500">{report.courseName}</p>
                   </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── TAB 6: Major Comparison ──────────────────────────────────────────────
-
-  function renderMajorComparison() {
-    const majors = data?.majorStats || [];
-    if (majors.length === 0) return <EmptyState msg="No approved blueprints to compare." />;
-
-    const chartData = majors.map((m) => ({
-      name: m.majorName.length > 20 ? m.majorName.slice(0, 18) + "…" : m.majorName,
-      "Avg HOT%": m.avgHOTPercent,
-      "CLO Coverage%": m.avgCLOCoverage,
-      "Topic Coverage%": m.avgTopicCoverage,
-    }));
-
-    const barColors = ["#6366f1", "#22c55e", "#f59e0b"];
-
-    return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Major Comparison — Averages Across Courses</h3>
-          <ResponsiveContainer width="100%" height={Math.max(200, majors.length * 60)}>
-            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" tick={{ fontSize: 10 }} domain={[0, 100]} unit="%" />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={120} />
-              <Tooltip />
-              <Legend />
-              {["Avg HOT%", "CLO Coverage%", "Topic Coverage%"].map((key, i) => (
-                <Bar key={key} dataKey={key} fill={barColors[i]} radius={[0, 4, 4, 0]} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Major</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Courses</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Blueprints</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Avg HOT%</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Avg CLO Coverage</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500">Avg Topic Coverage</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {majors.map((m) => (
-                <tr key={m.majorId} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{m.majorName}</td>
-                  <td className="px-4 py-3 text-center">{m.courseCount}</td>
-                  <td className="px-4 py-3 text-center">{m.blueprintCount}</td>
+                  <td className="px-4 py-3 text-gray-700">{report.instructorNames.join(", ") || "Unassigned"}</td>
+                  <td className="px-4 py-3 text-center">{report.rosterSize}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={m.avgHOTPercent >= 40 ? "text-green-600 font-medium" : "text-amber-600 font-medium"}>{m.avgHOTPercent}%</span>
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusStyle(report.status)}`}>
+                      {statusLabel(report.status)}
+                    </span>
                   </td>
-                  <td className="px-4 py-3 text-center"><CoverageBar percent={m.avgCLOCoverage} /></td>
-                  <td className="px-4 py-3 text-center"><CoverageBar percent={m.avgTopicCoverage} /></td>
+                  <td className="px-4 py-3 text-center">
+                    <CoverageBar percent={report.responseCompletionPercent} neutral={report.status === "APPROVED"} />
+                    <p className="mt-1 text-xs text-gray-400">{report.answeredResponses}/{report.totalResponses}</p>
+                  </td>
+                  <td className="px-4 py-3 text-center text-xs text-gray-500">{report.submittedAt ? new Date(report.submittedAt).toLocaleDateString() : "-"}</td>
+                  <td className="px-4 py-3 text-center text-xs text-gray-500">{report.reviewedAt ? new Date(report.reviewedAt).toLocaleDateString() : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Major</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Courses</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Approved</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Pending</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Needs Revision</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Missing Approved</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Avg Completion</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {majors.map((major) => (
+                <tr key={major.majorId} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{major.majorName}</td>
+                  <td className="px-4 py-3 text-center">{major.courses}</td>
+                  <td className="px-4 py-3 text-center text-green-700 font-medium">{major.approvedReports}</td>
+                  <td className="px-4 py-3 text-center">{major.pendingReports}</td>
+                  <td className="px-4 py-3 text-center">{major.needsRevisionReports}</td>
+                  <td className="px-4 py-3 text-center text-amber-700 font-medium">{major.missingApprovedReports}</td>
+                  <td className="px-4 py-3 text-center"><CoverageBar percent={major.avgResponseCompletion} neutral /></td>
                 </tr>
               ))}
             </tbody>
@@ -493,55 +862,296 @@ export default function AnalyticsPage() {
     );
   }
 
-  // ─── MAIN RENDER ──────────────────────────────────────────────────────────
+  function renderGradeAnalytics() {
+    if (gradesLoading) return <div className="py-12 text-center text-sm text-gray-500">Loading grade analytics...</div>;
+    if (!gradeData || gradeData.courseStats.length === 0) return <EmptyState msg="No approved grade data is available for the selected scope." />;
+    return (
+      <div className="space-y-6">
+        <div className="grid gap-3 md:grid-cols-4">
+          <MetricCard label="Average" value={`${gradeData.overview.average}%`} />
+          <MetricCard label="Median" value={`${gradeData.overview.median}%`} />
+          <MetricCard label="Standard Deviation" value={`${gradeData.overview.standardDeviation}%`} />
+          <MetricCard label="Fail Count" value={gradeData.overview.failCount} />
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-gray-900">Official Grade Distribution</h2>
+            <p className="text-xs text-gray-500">Approved grade assessments only.</p>
+          </div>
+          <GradeDistributionChart percents={gradeData.percents} />
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Course</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Roster</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Approved Assessments</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Completion</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Average</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Fail Rate</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Insight Flags</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {gradeData.courseStats.map((course) => (
+                <tr key={course.courseOfferingId} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-900">{course.courseCode}</p>
+                    <p className="text-xs text-gray-500">{course.courseName}</p>
+                  </td>
+                  <td className="px-4 py-3 text-center">{course.rosterSize}</td>
+                  <td className="px-4 py-3 text-center">{course.approvedAssessments}</td>
+                  <td className="px-4 py-3 text-center"><CoverageBar percent={course.completionPercent} /></td>
+                  <td className="px-4 py-3 text-center font-medium">{course.stats.average}%</td>
+                  <td className="px-4 py-3 text-center font-medium">{course.failRate}%</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {course.insights.slice(0, 3).map((insight) => (
+                        <span key={insight.metricKey} className={`rounded-full px-2 py-1 text-[10px] font-semibold ${insight.severity === "critical" ? "bg-red-100 text-red-700" : insight.severity === "warning" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
+                          {insight.title}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500">Major</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Courses</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Students</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Approved Assessments</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Average</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">Fail Rate</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {gradeData.majorSummary.map((major) => (
+                <tr key={major.majorId} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{major.majorName}</td>
+                  <td className="px-4 py-3 text-center">{major.courses}</td>
+                  <td className="px-4 py-3 text-center">{major.students}</td>
+                  <td className="px-4 py-3 text-center">{major.approvedAssessments}</td>
+                  <td className="px-4 py-3 text-center">{major.average}%</td>
+                  <td className="px-4 py-3 text-center">{major.failRate}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Analytics</h1>
-      <p className="text-sm text-gray-500 mb-6">Aggregate analysis across approved blueprints. Select filters to narrow the scope.</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Active-term blueprint analytics across approved exams, with historical trends separated from current-term review.
+        </p>
+      </div>
 
       {renderFilters()}
       {renderTabs()}
 
       {loading ? (
-        <div className="text-gray-500 py-12 text-center">Loading analytics...</div>
+        <div className="py-12 text-center text-sm text-gray-500">Loading analytics...</div>
       ) : (
         <>
+          {tab === "Current Term Overview" && renderOverview()}
           {tab === "CLO Coverage" && renderCLOCoverage()}
           {tab === "Topic Coverage" && renderTopicCoverage()}
-          {tab === "Bloom Trend" && renderBloomTrend()}
-          {tab === "Q-Type Trend" && renderQTypeTrend()}
-          {tab === "Assessment Load" && renderAssessmentLoad()}
-          {tab === "Major Comparison" && renderMajorComparison()}
+          {tab === "Bloom Balance" && renderBloomBalance()}
+          {tab === "Question Formats" && renderQuestionFormats()}
+          {tab === "Trends" && renderTrends()}
+          {tab === "Program Summary" && renderProgramSummary()}
+          {tab === "Course Reports" && renderCourseReports()}
+          {tab === "Grade Analytics" && renderGradeAnalytics()}
         </>
       )}
     </div>
   );
 }
 
-// ─── Shared small components ────────────────────────────────────────────────
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    NOT_STARTED: "Not Started",
+    DRAFT: "Draft",
+    SUBMITTED: "Pending Review",
+    APPROVED: "Approved",
+    NEEDS_REVISION: "Needs Revision",
+  };
+  return labels[status] || status.replace("_", " ");
+}
 
-function CoverageBar({ percent }: { percent: number }) {
-  const color = percent === 100 ? "bg-green-500" : percent >= 80 ? "bg-amber-400" : "bg-red-400";
+function statusStyle(status: string) {
+  const styles: Record<string, string> = {
+    NOT_STARTED: "bg-gray-100 text-gray-700",
+    DRAFT: "bg-slate-100 text-slate-700",
+    SUBMITTED: "bg-blue-100 text-blue-700",
+    APPROVED: "bg-green-100 text-green-700",
+    NEEDS_REVISION: "bg-amber-100 text-amber-700",
+  };
+  return styles[status] || styles.DRAFT;
+}
+
+function MetricCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function ReadinessRow({ label, value, neutral = false }: { label: string; value: number; neutral?: boolean }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="text-gray-600">{label}</span>
+        <span className={neutral ? "font-medium text-gray-900" : value >= 90 ? "font-medium text-green-700" : "font-medium text-amber-700"}>{value}%</span>
+      </div>
+      <CoverageBar percent={value} neutral={neutral} />
+    </div>
+  );
+}
+
+function CoverageBar({ percent, neutral = false }: { percent: number; neutral?: boolean }) {
+  const color = neutral ? "bg-indigo-500" : percent === 100 ? "bg-green-500" : percent >= 80 ? "bg-amber-400" : "bg-red-400";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${percent}%` }} />
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
       </div>
-      <span className="text-xs font-medium text-gray-600 w-10 text-right">{percent}%</span>
+      <span className="w-10 text-right text-xs font-medium text-gray-600">{percent}%</span>
+    </div>
+  );
+}
+
+function CourseReadinessTable({ courses }: { courses: CourseStat[] }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="border-b border-gray-200 bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">Course</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">Blueprints</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">Questions</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">CLO Coverage</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">Topic Coverage</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">High Order Thinking</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {courses.map((course) => (
+            <tr key={course.courseOfferingId || course.courseId} className="hover:bg-gray-50">
+              <td className="px-4 py-3">
+                <p className="font-medium text-gray-900">{course.courseCode}</p>
+                <p className="text-xs text-gray-500">{course.courseName}</p>
+              </td>
+              <td className="px-4 py-3 text-center">{course.blueprintCount}</td>
+              <td className="px-4 py-3 text-center">{course.totalQuestions}</td>
+              <td className="px-4 py-3 text-center"><CoverageBar percent={course.cloCoverage.percent} /></td>
+              <td className="px-4 py-3 text-center"><CoverageBar percent={course.topicCoverage.percent} /></td>
+              <td className="px-4 py-3 text-center text-indigo-700 font-medium">{course.highOrderThinkingPercent}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CoverageTable({
+  courses,
+  type,
+  expandedCourse,
+  setExpandedCourse,
+}: {
+  courses: CourseStat[];
+  type: "clo" | "topic";
+  expandedCourse: string | null;
+  setExpandedCourse: (value: string | null) => void;
+}) {
+  const isClo = type === "clo";
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="border-b border-gray-200 bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">Course</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">Blueprints</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">Total {isClo ? "CLOs" : "Topics"}</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">{isClo ? "Covered CLOs" : "Covered Topics"}</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">Gaps</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">Coverage</th>
+            <th className="px-4 py-3 text-center font-medium text-gray-500">Details</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {courses.map((course) => {
+            const coverage = isClo ? course.cloCoverage : course.topicCoverage;
+            const details = isClo ? course.loDetails : course.topicDetails;
+            const rowKey = `${type}-${course.courseOfferingId || course.courseId}`;
+            const expanded = expandedCourse === rowKey;
+            const gaps = coverage.total - coverage.covered;
+            return (
+              <Fragment key={rowKey}>
+                <tr className={gaps > 0 ? "bg-amber-50/50" : "hover:bg-gray-50"}>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-900">{course.courseCode}</p>
+                    <p className="text-xs text-gray-500">{course.courseName}</p>
+                  </td>
+                  <td className="px-4 py-3 text-center">{course.blueprintCount}</td>
+                  <td className="px-4 py-3 text-center">{coverage.total}</td>
+                  <td className="px-4 py-3 text-center font-medium text-green-700">{coverage.covered}</td>
+                  <td className="px-4 py-3 text-center">{gaps > 0 ? <span className="font-semibold text-amber-700">{gaps}</span> : <span className="text-green-700">0</span>}</td>
+                  <td className="px-4 py-3 text-center"><CoverageBar percent={coverage.percent} /></td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => setExpandedCourse(expanded ? null : rowKey)}
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      {expanded ? "Hide" : "Details"}
+                    </button>
+                  </td>
+                </tr>
+                {expanded && (
+                  <tr>
+                    <td colSpan={7} className="bg-gray-50 px-6 py-4">
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {details.map((item) => (
+                          <div
+                            key={item.id}
+                            className={`rounded-lg px-3 py-2 text-xs ${item.covered ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-semibold">{"code" in item ? item.code : item.name}</span>
+                              <span>{item.covered ? `${item.questionCount} q` : "Gap"}</span>
+                            </div>
+                            {"description" in item && <p className="mt-1 text-gray-600">{item.description}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function EmptyState({ msg }: { msg?: string }) {
-  return <div className="text-center py-12 text-gray-400 text-sm">{msg || "No data available for the selected filters."}</div>;
-}
-
-function PromptCourseSelection() {
-  return (
-    <div className="text-center py-12">
-      <p className="text-gray-500 text-sm mb-2">Select a specific course from the filters above to view trend data.</p>
-      <p className="text-xs text-gray-400">Trends are only meaningful for a single course over multiple semesters.</p>
-    </div>
-  );
+  return <div className="rounded-xl border border-gray-200 bg-white py-12 text-center text-sm text-gray-400">{msg || "No approved blueprint data is available for the selected scope."}</div>;
 }
