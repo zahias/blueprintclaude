@@ -403,7 +403,7 @@ export function InstructorNewBlueprintBuilder() {
             <p className="mt-1 text-sm text-gray-500">Fill the number of questions for each topic and Bloom level.</p>
           </div>
           <BlueprintBloomMatrix topics={topics} entries={topicEntries} onChange={updateEntries} />
-          {!canSubmit && topicEntries.length > 0 && (
+          {submitIssues.length > 0 && topicEntries.length > 0 && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="mb-2 text-sm font-medium text-amber-800">Current issues</p>
               <ul className="list-inside list-disc space-y-0.5 text-sm text-amber-700">

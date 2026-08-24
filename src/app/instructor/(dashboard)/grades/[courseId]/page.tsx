@@ -90,7 +90,6 @@ export default function InstructorCourseGradebookPage({ params }: { params: Prom
   const { courseId } = use(params);
   const [gradebook, setGradebook] = useState<Gradebook | null>(null);
   const [loading, setLoading] = useState(true);
-  const [importingGrades, setImportingGrades] = useState(false);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<"assessments" | "matrix" | "preview">("assessments");
   const [message, setMessage] = useState("");
@@ -147,29 +146,6 @@ export default function InstructorCourseGradebookPage({ params }: { params: Prom
       complete: gradebook.gradeAssessments.length > 0 && gradebook.gradebookStatus === "APPROVED",
     };
   }, [gradebook]);
-
-  async function importGrades(file: File | null) {
-    if (!file) return;
-    setImportingGrades(true);
-    setError("");
-    setMessage("");
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(`/api/instructor/courses/${courseId}/grades/import`, { method: "POST", body: formData });
-    const data = await res.json();
-    if (res.ok) {
-      const nextDrafts = { ...gradeDrafts };
-      data.updates.forEach((grade: { assessmentId: string; studentId: string; rawPoints: number | null }) => {
-        nextDrafts[`${grade.assessmentId}:${grade.studentId}`] = grade.rawPoints === null ? "" : String(grade.rawPoints);
-      });
-      setGradeDrafts(nextDrafts);
-      const warnings = data.errors?.length ? ` ${data.errors.length} row warning(s).` : "";
-      setMessage(`Imported ${data.imported} grade cell(s) into the table.${warnings} Review, then save grades.`);
-    } else {
-      setError(data.errors?.join(" ") || data.error || "Grade import failed");
-    }
-    setImportingGrades(false);
-  }
 
   async function addAssessment(e: React.FormEvent) {
     e.preventDefault();
@@ -400,22 +376,6 @@ export default function InstructorCourseGradebookPage({ params }: { params: Prom
             <p className="text-sm text-gray-500">Enter raw points. Submitted and approved assessments are read-only.</p>
           </div>
           <div className="flex gap-2">
-            <a
-              href={`/api/instructor/courses/${courseId}/grades/template`}
-              className={`px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm ${editable && !gradebookLocked && gradebook.enrollments.length > 0 && gradebook.gradeAssessments.length > 0 ? "text-gray-700 hover:bg-gray-50" : "pointer-events-none text-gray-300 bg-gray-50"}`}
-            >
-              Grade Template
-            </a>
-            <label className={`px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm ${editable && !gradebookLocked ? "text-gray-700 hover:bg-gray-50 cursor-pointer" : "text-gray-300 bg-gray-50 cursor-not-allowed"}`}>
-              {importingGrades ? "Importing..." : "Import Grades"}
-              <input
-                type="file"
-                accept=".csv"
-                disabled={!editable || gradebookLocked || importingGrades}
-                onChange={(e) => importGrades(e.target.files?.[0] || null)}
-                className="hidden"
-              />
-            </label>
             <button onClick={saveGrades} disabled={saving || !editable || gradebookLocked || gradebook.gradeAssessments.length === 0} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50">
               {saving ? "Saving..." : "Save Grades"}
             </button>
