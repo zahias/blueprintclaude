@@ -6,34 +6,11 @@ import { verifyPassword as verifyInstructorPassword, signInstructorToken } from 
 import { clearRoleCookies } from "@/lib/cookies";
 
 type LoginRole = "admin" | "coordinator" | "instructor";
-type DemoCredential = {
-  email: string;
-  password: string;
-  role: LoginRole;
-};
 
 const ROLE_REDIRECTS: Record<LoginRole, string> = {
   admin: "/admin/analytics",
   coordinator: "/coordinator/term-setup",
   instructor: "/instructor",
-};
-
-const DEMO_CREDENTIALS: Record<string, DemoCredential> = {
-  "admin@blueprint.edu": {
-    email: "admin@blueprint.edu",
-    password: "admin123",
-    role: "admin",
-  },
-  "coordinator@blueprint.edu": {
-    email: "coordinator@blueprint.edu",
-    password: "coord123",
-    role: "coordinator",
-  },
-  "instructor@blueprint.edu": {
-    email: "instructor@blueprint.edu",
-    password: "instructor123",
-    role: "instructor",
-  },
 };
 
 function buildLoginResponse(user: { id: string; email: string; name: string }, role: LoginRole) {
@@ -75,27 +52,6 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const demoLogin = process.env.NODE_ENV !== "production" && DEMO_CREDENTIALS[normalizedEmail]?.password === password
-      ? DEMO_CREDENTIALS[normalizedEmail]
-      : null;
-
-    if (demoLogin) {
-      const dbUser = demoLogin.role === "admin"
-        ? await prisma.admin.findUnique({ where: { email: demoLogin.email } })
-        : demoLogin.role === "coordinator"
-          ? await prisma.coordinator.findUnique({ where: { email: demoLogin.email } })
-          : await prisma.instructor.findUnique({ where: { email: demoLogin.email } });
-      if (!dbUser) {
-        return NextResponse.json({ error: "Demo user is missing from the current database. Run the seed first." }, { status: 500 });
-      }
-      if ("isActive" in dbUser && !dbUser.isActive) {
-        return NextResponse.json({ error: "Account is deactivated. Contact your administrator." }, { status: 403 });
-      }
-      const response = buildLoginResponse({ id: dbUser.id, email: dbUser.email, name: dbUser.name }, demoLogin.role);
-      console.info(`[api/login] ${demoLogin.role} demo ${Date.now() - startedAt}ms`);
-      return response;
-    }
-
     const [admin, coordinator, instructor] = await Promise.all([
       prisma.admin.findUnique({ where: { email: normalizedEmail } }),
       prisma.coordinator.findUnique({ where: { email: normalizedEmail } }),
