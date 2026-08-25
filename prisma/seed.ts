@@ -13,20 +13,11 @@ const DEMO_COURSE_TITLES = [
 ];
 
 const MAJOR_PREFIX_RULES: { pattern: RegExp; prefix: string }[] = [
-  { pattern: /architecture/i, prefix: "ARCH" },
-  { pattern: /electrical|communication engineering/i, prefix: "ECE" },
-  { pattern: /mba|master of business/i, prefix: "MBA" },
-  { pattern: /communication|social media/i, prefix: "COMM" },
-  { pattern: /speech/i, prefix: "SPTH" },
-  { pattern: /business administration/i, prefix: "BBA" },
-  { pattern: /civil/i, prefix: "CIVE" },
-  { pattern: /mechanical/i, prefix: "MECH" },
-  { pattern: /petroleum/i, prefix: "PETR" },
-  { pattern: /master of laws/i, prefix: "MLAW" },
-  { pattern: /laws/i, prefix: "LAW" },
-  { pattern: /computer science/i, prefix: "CS" },
-  { pattern: /nursing/i, prefix: "NURS" },
   { pattern: /public health/i, prefix: "PBHL" },
+];
+
+const MAJOR_SEEDS: { name: string; description: string }[] = [
+  { name: "Bachelor of Science in Public Health", description: "Public health program covering epidemiology, health policy, and community health." },
 ];
 
 const LO_TEMPLATES = [
@@ -216,13 +207,16 @@ async function main() {
     }),
   ]);
 
+  await Promise.all(MAJOR_SEEDS.map((seed) => prisma.major.upsert({
+    where: { name: seed.name },
+    update: { description: seed.description },
+    create: { name: seed.name, description: seed.description },
+  })));
+
   const currentMajors = await prisma.major.findMany({
     orderBy: { name: "asc" },
     include: { courses: { orderBy: { code: "asc" } } },
   });
-  if (currentMajors.length === 0) {
-    throw new Error("No majors found. Create majors in the app before running this analytics seed.");
-  }
 
   const courses: { id: string; code: string; name: string; majorId: string; majorName: string; majorCourseIndex: number }[] = [];
 
@@ -458,23 +452,6 @@ async function main() {
         courseOfferingId: offering.id,
         instructorId: instructor.id,
         status: reportStatus,
-        topicsCovered: topics.slice(0, 6 + (courseIndex % 3)).map((topic) => topic.name),
-        attendanceConcerns: courseIndex % 4 === 0
-          ? [{ id: `20${courseIndex}-102-621`, name: `Student ${courseIndex + 1}`, note: "Repeated absence during the second half of the semester" }]
-          : [],
-        highestScores: [
-          { id: `20${courseIndex}-401-853`, name: `High Performer ${courseIndex + 1}`, grade: `${88 - (courseIndex % 4)}` },
-          { id: `20${courseIndex}-401-953`, name: `High Performer ${courseIndex + 2}`, grade: `${86 - (courseIndex % 3)}` },
-        ],
-        lowestScores: [
-          { id: `20${courseIndex}-502-271`, name: `At Risk ${courseIndex + 1}`, grade: `${58 + (courseIndex % 12)}` },
-          { id: `20${courseIndex}-402-035`, name: `At Risk ${courseIndex + 2}`, grade: `${62 + (courseIndex % 10)}` },
-        ],
-        assessmentEvidence: [
-          { title: "Midterm Exam", type: "Exam with answer key", notes: "Included in course file evidence" },
-          { title: "Final Exam", type: "Exam with answer key", notes: courseIndex % 5 === 0 ? "Coordinator should verify alignment to high-order questions" : "Aligned with approved blueprint" },
-          { title: "Applied assignment", type: "Student work sample", notes: "Representative sample retained" },
-        ],
         responses: {
           learningOutcomeEvidence: `The learning outcomes of ${course.code} were addressed through structured lectures, applied activities, and assessment tasks aligned to the approved blueprint. Students moved from core terminology to applied case analysis across the semester.`,
           studentCenteredness: "Student-centered learning was promoted through discussion, guided questioning, short applied tasks, and opportunities for students to justify answers rather than only recall information.",
@@ -486,16 +463,6 @@ async function main() {
           differentiatedTeaching: "Teaching was differentiated through visual explanations, discussion, applied examples, feedback on drafts or tasks, and additional clarification for students who needed reinforcement.",
           genericSkillsDevelopment: "The course developed critical thinking, problem solving, communication, organization, and time management through case analysis, presentations, scheduled tasks, and reflective discussion.",
         },
-        gradeSummary: courseIndex % 6 === 0
-          ? "Grades are high with no failing students. Instructor should explain whether assessment difficulty was appropriate."
-          : courseIndex % 6 === 1
-            ? "Several students are at risk and the fail rate is above the expected threshold."
-            : "Grade distribution is within the expected course range with a small number of low performers.",
-        reflection: "Students engaged well with applied activities. The most difficult content was the integration and case analysis section.",
-        improvementPlan: courseIndex % 3 === 0
-          ? "Add more formative practice before the major exam and revise two case-based questions for clarity."
-          : "Keep the topic sequence but add more applied examples before final assessment.",
-        evidenceNotes: "Course file includes syllabus, selected handouts, assessment samples, answer keys, and grade summaries.",
         submittedAt: reportSubmittedAt,
         reviewedAt: reportReviewedAt,
         reviewedById: reportReviewedAt ? coordinator.id : null,
