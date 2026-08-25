@@ -9,10 +9,6 @@ import {
 } from "@/lib/courseReports.server";
 import prisma from "@/lib/prisma";
 
-function normalizeJsonArray(value: unknown) {
-  return Array.isArray(value) ? value : [];
-}
-
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value : "";
 }
@@ -70,15 +66,6 @@ export async function PUT(
 
   const data = {
     responses: normalizeResponses(body.responses),
-    topicsCovered: normalizeJsonArray(body.topicsCovered),
-    attendanceConcerns: normalizeJsonArray(body.attendanceConcerns),
-    highestScores: normalizeJsonArray(body.highestScores),
-    lowestScores: normalizeJsonArray(body.lowestScores),
-    assessmentEvidence: normalizeJsonArray(body.assessmentEvidence),
-    gradeSummary: normalizeText(body.gradeSummary),
-    reflection: normalizeText(body.reflection),
-    improvementPlan: normalizeText(body.improvementPlan),
-    evidenceNotes: normalizeText(body.evidenceNotes),
     status: requestedStatus,
     submittedAt: requestedStatus === "SUBMITTED" ? new Date() : existing.submittedAt,
     reviewedAt: requestedStatus === "SUBMITTED" ? null : existing.reviewedAt,

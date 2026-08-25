@@ -15,7 +15,7 @@ const TRIAL_ACCOUNTS = [
     role: "Coordinator",
     email: "coordinator@blueprint.edu",
     password: "coord123",
-    note: "Course setup, bulk upload, blueprint review",
+    note: "Term setup, syllabus import, blueprint review",
   },
   {
     role: "Instructor",

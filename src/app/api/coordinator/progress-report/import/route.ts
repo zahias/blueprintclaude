@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
       const courseCache = new Map<string, { id: string; code: string; majorId: string }>();
       const offeringCache = new Map<string, { id: string }>();
       const studentCache = new Map<string, { id: string }>();
+      const enrollmentTargets: { courseId: string; courseOfferingId: string; studentId: string; group: string | null }[] = [];
 
       for (const registration of registrations) {
         const majorId = prefixMajorMap[registration.prefix];
@@ -139,27 +140,44 @@ export async function POST(req: NextRequest) {
           studentCache.set(registration.studentId, student);
         }
 
-        const existingEnrollment = await tx.courseEnrollment.findUnique({
-          where: { courseOfferingId_studentId: { courseOfferingId: offering.id, studentId: student.id } },
-          select: { id: true },
+        enrollmentTargets.push({
+          courseId: course.id,
+          courseOfferingId: offering.id,
+          studentId: student.id,
+          group: registration.reportMajor || null,
         });
-        if (existingEnrollment) {
-          updatedEnrollments++;
-          await tx.courseEnrollment.update({
-            where: { id: existingEnrollment.id },
-            data: { group: registration.reportMajor || null },
-          });
+      }
+
+      // Dedupe by (offering, student), keeping the last occurrence — mirrors the original
+      // per-row behavior where a repeated row would overwrite the prior one via update.
+      const dedupedTargets = [...new Map(enrollmentTargets.map((t) => [`${t.courseOfferingId}:${t.studentId}`, t])).values()];
+
+      const offeringIds = [...new Set(dedupedTargets.map((t) => t.courseOfferingId))];
+      const studentIds = [...new Set(dedupedTargets.map((t) => t.studentId))];
+      const existingEnrollments = await tx.courseEnrollment.findMany({
+        where: { courseOfferingId: { in: offeringIds }, studentId: { in: studentIds } },
+        select: { id: true, courseOfferingId: true, studentId: true },
+      });
+      const existingByKey = new Map(existingEnrollments.map((e) => [`${e.courseOfferingId}:${e.studentId}`, e.id]));
+
+      const toCreate: typeof dedupedTargets = [];
+      const toUpdate: { id: string; group: string | null }[] = [];
+      for (const target of dedupedTargets) {
+        const existingId = existingByKey.get(`${target.courseOfferingId}:${target.studentId}`);
+        if (existingId) {
+          toUpdate.push({ id: existingId, group: target.group });
         } else {
-          createdEnrollments++;
-          await tx.courseEnrollment.create({
-            data: {
-              courseId: course.id,
-              courseOfferingId: offering.id,
-              studentId: student.id,
-              group: registration.reportMajor || null,
-            },
-          });
+          toCreate.push(target);
         }
+      }
+
+      if (toCreate.length > 0) {
+        await tx.courseEnrollment.createMany({ data: toCreate });
+        createdEnrollments += toCreate.length;
+      }
+      if (toUpdate.length > 0) {
+        await Promise.all(toUpdate.map((u) => tx.courseEnrollment.update({ where: { id: u.id }, data: { group: u.group } })));
+        updatedEnrollments += toUpdate.length;
       }
     }, { maxWait: 10000, timeout: 120000 });
 

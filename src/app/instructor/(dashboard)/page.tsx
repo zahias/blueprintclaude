@@ -73,6 +73,7 @@ function InstructorDashboardContent() {
   const [courseReports, setCourseReports] = useState<CourseReportRow[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
 
   async function loadBlueprints() {
     const params = new URLSearchParams();
@@ -124,9 +125,13 @@ function InstructorDashboardContent() {
 
   async function handleDuplicate(bp: Blueprint) {
     setActionLoading(bp.id);
+    setActionError("");
     try {
       const res = await fetch(`/api/blueprints/${bp.accessToken}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        setActionError("Could not load the blueprint to duplicate.");
+        return;
+      }
       const data = await res.json();
       const payload = {
         courseId: data.courseId,
@@ -158,7 +163,11 @@ function InstructorDashboardContent() {
       if (createRes.ok) {
         const created = await createRes.json();
         router.push(`/instructor/edit/${created.accessToken}`);
+      } else {
+        setActionError("Could not create the duplicate blueprint.");
       }
+    } catch {
+      setActionError("Network error while duplicating the blueprint.");
     } finally {
       setActionLoading(null);
     }
@@ -268,6 +277,9 @@ function InstructorDashboardContent() {
 
   return (
     <div>
+      {actionError && (
+        <div className="mb-4 bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-2 text-sm">{actionError}</div>
+      )}
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -306,7 +318,7 @@ function InstructorDashboardContent() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <WorkMetric label="Needs action" value={blueprintsNeedRevision.length + gradeNeedsRevision.length + reportsNeedRevision.length} tone="amber" />
           <WorkMetric label="Drafts to finish" value={blueprintsDraft.length + gradeDraft.length + reportsDraft.length} tone="gray" />
-          <WorkMetric label="Pending approval" value={blueprintsPending.length + gradePending.length + reportsPending.length} tone="blue" />
+          <WorkMetric label="Pending Review" value={blueprintsPending.length + gradePending.length + reportsPending.length} tone="blue" />
         </div>
 
         {(blueprintsNeedRevision.length > 0 || gradeNeedsRevision.length > 0 || reportsNeedRevision.length > 0) && (

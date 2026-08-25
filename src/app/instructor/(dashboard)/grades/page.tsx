@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { STATUS_LABELS, STATUS_COLORS } from "@/lib/constants";
 
 interface Major {
   id: string;
@@ -77,11 +78,11 @@ export default function InstructorGradesPage() {
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <StatusCard label="Needs revision" value={statusSummary.revision} tone="amber" />
-            <StatusCard label="Pending approval" value={statusSummary.pending} tone="blue" />
-            <StatusCard label="Draft" value={statusSummary.draft} tone="gray" />
-            <StatusCard label="Approved" value={statusSummary.approved} tone="green" />
-            <StatusCard label="Not started" value={statusSummary.notStarted} tone="gray" />
+            <StatusCard label={STATUS_LABELS.NEEDS_REVISION} value={statusSummary.revision} tone="amber" />
+            <StatusCard label={STATUS_LABELS.SUBMITTED} value={statusSummary.pending} tone="blue" />
+            <StatusCard label={STATUS_LABELS.DRAFT} value={statusSummary.draft} tone="gray" />
+            <StatusCard label={STATUS_LABELS.APPROVED} value={statusSummary.approved} tone="green" />
+            <StatusCard label={STATUS_LABELS.NOT_STARTED} value={statusSummary.notStarted} tone="gray" />
           </div>
           <CourseTable title="Active Term" courses={activeCourses} empty="No active-term course assignments yet." />
           {historicalCourses.length > 0 && (
@@ -149,13 +150,8 @@ function CourseTable({ title, courses, empty }: { title: string; courses: Course
 }
 
 function GradeStatus({ status }: { status?: string | null }) {
-  const key = gradeStatusKey(status);
-  if (key === "notStarted") return <span className="text-xs rounded-full bg-gray-100 text-gray-500 px-2 py-1 font-semibold">Not started</span>;
-  if (key === "approved") return <span className="text-xs rounded-full bg-green-100 text-green-700 px-2 py-1 font-semibold">Approved</span>;
-  if (key === "pending") return <span className="text-xs rounded-full bg-blue-100 text-blue-700 px-2 py-1 font-semibold">Pending approval</span>;
-  if (key === "revision") return <span className="text-xs rounded-full bg-amber-100 text-amber-700 px-2 py-1 font-semibold">Needs revision</span>;
-  if (key === "draft") return <span className="text-xs rounded-full bg-gray-100 text-gray-700 px-2 py-1 font-semibold">Draft</span>;
-  return <span className="text-xs rounded-full bg-indigo-100 text-indigo-700 px-2 py-1 font-semibold">In progress</span>;
+  const enumKey = status && STATUS_LABELS[status] ? status : "NOT_STARTED";
+  return <span className={`text-xs rounded-full px-2 py-1 font-semibold ${STATUS_COLORS[enumKey]}`}>{STATUS_LABELS[enumKey]}</span>;
 }
 
 type GradeStatusKey = "revision" | "pending" | "draft" | "approved" | "notStarted";

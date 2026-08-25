@@ -432,16 +432,7 @@ model CourseReport {
   instructorId       String
   instructor         Instructor            @relation(fields: [instructorId], references: [id])
   status             CourseReportStatus    @default(DRAFT)
-  topicsCovered      Json?
-  attendanceConcerns Json?
-  highestScores      Json?
-  lowestScores       Json?
-  assessmentEvidence Json?
   responses          Json?
-  gradeSummary       String?
-  reflection         String?
-  improvementPlan    String?
-  evidenceNotes      String?
   submittedAt        DateTime?
   reviewedAt         DateTime?
   reviewedById       String?

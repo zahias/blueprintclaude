@@ -74,16 +74,27 @@ export function getAcademicYears(): string[] {
   return years;
 }
 
-export const BLUEPRINT_STATUS_LABELS: Record<string, string> = {
+// Canonical status vocabulary used everywhere a submission-style status is shown to a user.
+export const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
-  SUBMITTED: "Submitted",
+  SUBMITTED: "Pending Review",
   APPROVED: "Approved",
   NEEDS_REVISION: "Needs Revision",
+  NOT_STARTED: "Not Started",
 };
 
-export const BLUEPRINT_STATUS_COLORS: Record<string, string> = {
+export const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
   SUBMITTED: "bg-blue-100 text-blue-700",
   APPROVED: "bg-green-100 text-green-700",
   NEEDS_REVISION: "bg-amber-100 text-amber-700",
+  NOT_STARTED: "bg-gray-100 text-gray-500",
 };
+
+export function statusLabel(status: string | null | undefined): string {
+  if (!status) return STATUS_LABELS.NOT_STARTED;
+  return STATUS_LABELS[status] || status;
+}
+
+export const BLUEPRINT_STATUS_LABELS = STATUS_LABELS;
+export const BLUEPRINT_STATUS_COLORS = STATUS_COLORS;

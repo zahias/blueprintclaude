@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SyllabusImportPanel } from "@/components/SyllabusImportPanel";
+import { statusLabel } from "@/lib/constants";
 
 interface Term {
   id: string;
@@ -642,7 +643,7 @@ export default function CoordinatorTermSetupPage() {
                     <td className="px-4 py-3 text-center">
                       <StatusPill
                         ok={offering.courseReport?.status === "APPROVED"}
-                        label={offering.courseReport ? offering.courseReport.status.replace("_", " ") : "Not started"}
+                        label={statusLabel(offering.courseReport?.status)}
                       />
                     </td>
                   </tr>

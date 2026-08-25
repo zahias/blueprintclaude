@@ -26,11 +26,24 @@ export default function InstructorsPage() {
   const [saving, setSaving] = useState(false);
   const [allMajors, setAllMajors] = useState<Major[]>([]);
   const [togglingMajor, setTogglingMajor] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   async function load() {
-    const res = await fetch("/api/admin/instructors");
-    if (res.ok) setInstructors(await res.json());
-    setLoading(false);
+    try {
+      const res = await fetch("/api/admin/instructors");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setLoadError("Could not load instructors. Please refresh the page.");
+      } else {
+        setLoadError("");
+        setInstructors(data);
+      }
+    } catch {
+      setLoadError("Network error while loading instructors.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadMajors() {
@@ -76,6 +89,12 @@ export default function InstructorsPage() {
     load();
   }
 
+  const filteredInstructors = instructors.filter((inst) => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return true;
+    return `${inst.name} ${inst.email}`.toLowerCase().includes(normalized);
+  });
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
@@ -114,6 +133,10 @@ export default function InstructorsPage() {
           {showForm ? "Cancel" : "+ Add Instructor"}
         </button>
       </div>
+
+      {loadError && (
+        <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-2 text-sm mb-4">{loadError}</div>
+      )}
 
       {/* Create form */}
       {showForm && (
@@ -171,6 +194,16 @@ export default function InstructorsPage() {
       ) : instructors.length === 0 ? (
         <div className="text-center py-12 text-gray-500">No instructors yet. Add one above.</div>
       ) : (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name or email..."
+              className="w-72 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+            <span className="text-xs text-gray-400">{filteredInstructors.length} of {instructors.length} instructor{instructors.length === 1 ? "" : "s"}</span>
+          </div>
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -184,7 +217,9 @@ export default function InstructorsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {instructors.map((inst) => (
+              {filteredInstructors.length === 0 ? (
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No instructors match &quot;{search}&quot;.</td></tr>
+              ) : filteredInstructors.map((inst) => (
                 <tr key={inst.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium text-gray-900">{inst.name}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{inst.email}</td>
@@ -236,6 +271,7 @@ export default function InstructorsPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

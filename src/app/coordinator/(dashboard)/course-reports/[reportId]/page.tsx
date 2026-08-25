@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { COURSE_PROGRESS_REPORT_PROMPTS } from "@/lib/constants";
+import { COURSE_PROGRESS_REPORT_PROMPTS, STATUS_COLORS, statusLabel } from "@/lib/constants";
 
 type ResponseMap = Record<string, string>;
 
@@ -21,12 +21,7 @@ interface Report {
   comments: { id: string; content: string; createdAt: string; coordinator: { name: string } }[];
 }
 
-const styles: Record<string, string> = {
-  SUBMITTED: "bg-blue-100 text-blue-700",
-  APPROVED: "bg-green-100 text-green-700",
-  NEEDS_REVISION: "bg-amber-100 text-amber-700",
-  DRAFT: "bg-gray-100 text-gray-700",
-};
+const styles = STATUS_COLORS;
 
 export default function CoordinatorCourseReportDetailPage() {
   const params = useParams<{ reportId: string }>();
@@ -87,7 +82,7 @@ export default function CoordinatorCourseReportDetailPage() {
           <p className="mt-1 text-sm text-gray-500">Instructor: {report.instructor.name} • {report.courseOffering.course.major.name}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${styles[report.status] || styles.DRAFT}`}>{report.status.replace("_", " ")}</span>
+          <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${styles[report.status] || styles.DRAFT}`}>{statusLabel(report.status)}</span>
           <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600">{completion.answered}/{completion.total} answered</span>
         </div>
       </div>

@@ -10,15 +10,6 @@ export type CourseReportStatusValue = typeof COURSE_REPORT_STATUSES[number];
 export function emptyCourseReportData() {
   return {
     responses: {},
-    topicsCovered: [],
-    attendanceConcerns: [],
-    highestScores: [],
-    lowestScores: [],
-    assessmentEvidence: [],
-    gradeSummary: "",
-    reflection: "",
-    improvementPlan: "",
-    evidenceNotes: "",
   };
 }
 

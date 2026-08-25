@@ -203,6 +203,7 @@ const TABS = [
   "Topic Coverage",
   "Bloom Balance",
   "Question Formats",
+  "Readiness Gaps",
   "Trends",
   "Program Summary",
   "Course Reports",
@@ -228,7 +229,15 @@ export default function AnalyticsPage() {
     [data, majorId]
   );
 
-  const filteredCourses = data?.filters.courses.filter((course) => !majorId || course.majorId === majorId) || [];
+  const filteredCourses = useMemo(
+    () => data?.filters.courses.filter((course) => !majorId || course.majorId === majorId) || [],
+    [data, majorId]
+  );
+
+  const riskyCourses = useMemo(() => {
+    const courses = data?.courseStats || [];
+    return courses.filter((course) => course.cloCoverage.percent < 100 || course.topicCoverage.percent < 100);
+  }, [data]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -286,6 +295,8 @@ export default function AnalyticsPage() {
     const majorCourseReports = data.courseReportStats.filter((report) => report.majorId === majorId);
     const summary = data.programSummary.find((major) => major.majorId === majorId);
     const reportSummary = data.courseReportProgramSummary.find((major) => major.majorId === majorId);
+    const majorGradeCourses = (gradeData?.courseStats || []).filter((course) => course.majorId === majorId);
+    const gradeSummary = gradeData?.majorSummary.find((major) => major.majorId === majorId);
     const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
     const doc = new jsPDF();
@@ -383,6 +394,41 @@ export default function AnalyticsPage() {
       headStyles: { fillColor: [17, 24, 39] },
     });
 
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [["Grade Outcomes (Approved Gradebooks)", "Courses", "Students", "Average", "Fail Rate", "Completion"]],
+      body: [[
+        "Program",
+        gradeSummary?.courses ?? 0,
+        gradeSummary?.students ?? 0,
+        `${gradeSummary?.average ?? 0}%`,
+        `${gradeSummary?.failRate ?? 0}%`,
+        `${gradeSummary?.completionPercent ?? 0}%`,
+      ]],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [79, 70, 229] },
+    });
+
+    if (majorGradeCourses.length > 0) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 10,
+        head: [["Course", "Roster", "Approved Assessments", "Average", "Fail Rate", "Completion"]],
+        body: majorGradeCourses.map((course) => [
+          `${course.courseCode} - ${course.courseName}`,
+          course.rosterSize,
+          course.approvedAssessments,
+          `${course.stats.average}%`,
+          `${course.failRate}%`,
+          `${course.completionPercent}%`,
+        ]),
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [17, 24, 39] },
+      });
+    } else {
+      doc.setFontSize(9);
+      doc.text("No approved gradebooks for this major yet.", 14, (doc as any).lastAutoTable.finalY + 8);
+    }
+
     const fileName = `analytics-${selectedMajor.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${term.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf`;
     doc.save(fileName);
   }
@@ -461,9 +507,6 @@ export default function AnalyticsPage() {
     const courses = data?.courseStats || [];
     const overview = data?.overview;
     if (!overview || courses.length === 0) return <EmptyState />;
-    const riskyCourses = courses.filter(
-      (course) => course.cloCoverage.percent < 100 || course.topicCoverage.percent < 100
-    );
 
     return (
       <div className="space-y-6">
@@ -485,7 +528,14 @@ export default function AnalyticsPage() {
             </div>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="mb-4 text-sm font-semibold text-gray-900">Coverage Alerts</h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">Coverage Alerts</h2>
+              {riskyCourses.length > 0 && (
+                <button onClick={() => setTab("Readiness Gaps")} className="text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                  View all {riskyCourses.length} &rarr;
+                </button>
+              )}
+            </div>
             {riskyCourses.length === 0 ? (
               <p className="text-sm text-green-700">All analyzed courses have complete CLO and topic coverage.</p>
             ) : (
@@ -500,6 +550,55 @@ export default function AnalyticsPage() {
           </div>
         </div>
         <CourseReadinessTable courses={courses} />
+      </div>
+    );
+  }
+
+  function renderReadinessGaps() {
+    const courses = data?.courseStats || [];
+    if (courses.length === 0) return <EmptyState />;
+    const cloGapCourses = courses.filter((course) => course.cloCoverage.percent < 100);
+    const topicGapCourses = courses.filter((course) => course.topicCoverage.percent < 100);
+
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-gray-500">Every active-term course with an incomplete CLO or topic mapping. Fix gaps here before the term closes.</p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <MetricCard label="Courses With Gaps" value={riskyCourses.length} />
+          <MetricCard label="Courses Missing CLOs" value={cloGapCourses.length} />
+          <MetricCard label="Courses Missing Topics" value={topicGapCourses.length} />
+        </div>
+        {riskyCourses.length === 0 ? (
+          <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-sm text-green-700">
+            All analyzed courses have complete CLO and topic coverage.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">Course</th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-500">Major</th>
+                  <th className="px-4 py-2 text-center font-medium text-gray-500">CLO Gaps</th>
+                  <th className="px-4 py-2 text-center font-medium text-gray-500">Topic Gaps</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {riskyCourses.map((course) => (
+                  <tr key={course.courseOfferingId || course.courseId}>
+                    <td className="px-4 py-2">
+                      <span className="font-mono text-xs text-indigo-600">{course.courseCode}</span>{" "}
+                      <span className="text-gray-700">{course.courseName}</span>
+                    </td>
+                    <td className="px-4 py-2 text-gray-600">{course.majorName}</td>
+                    <td className="px-4 py-2 text-center text-amber-700">{course.cloCoverage.total - course.cloCoverage.covered}</td>
+                    <td className="px-4 py-2 text-center text-amber-700">{course.topicCoverage.total - course.topicCoverage.covered}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   }
@@ -970,6 +1069,7 @@ export default function AnalyticsPage() {
           {tab === "Topic Coverage" && renderTopicCoverage()}
           {tab === "Bloom Balance" && renderBloomBalance()}
           {tab === "Question Formats" && renderQuestionFormats()}
+          {tab === "Readiness Gaps" && renderReadinessGaps()}
           {tab === "Trends" && renderTrends()}
           {tab === "Program Summary" && renderProgramSummary()}
           {tab === "Course Reports" && renderCourseReports()}

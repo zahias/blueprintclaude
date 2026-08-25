@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { statusLabel } from "@/lib/constants";
 
 interface GradebookRow {
   id: string;
@@ -58,7 +59,7 @@ export default function CoordinatorGradesPage() {
               statusFilter === status ? "bg-teal-600 text-white" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
             }`}
           >
-            {status ? status.replace("_", " ") : "All"}
+            {status ? statusLabel(status) : "All"}
           </button>
         ))}
       </div>
@@ -90,7 +91,7 @@ export default function CoordinatorGradesPage() {
                   <td className="px-5 py-4 text-sm text-gray-600">{gradebook.instructor.name}</td>
                   <td className="px-5 py-4 text-center">
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${statusBadge(gradebook.status)}`}>
-                      {gradebook.status.replace("_", " ")}
+                      {statusLabel(gradebook.status)}
                     </span>
                   </td>
                   <td className="px-5 py-4 text-center text-sm text-gray-700">{gradebook.assessmentCount}</td>

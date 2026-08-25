@@ -456,7 +456,15 @@ export function SyllabusImportPanel({ embedded = false, fixedTermId = "", onImpo
           </div>
           {result.errors.length > 0 && (
             <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
-              {result.errors.map((item, index) => <p key={index}>{item}</p>)}
+              {result.errors.slice(0, 5).map((item, index) => <p key={index}>{item}</p>)}
+              {result.errors.length > 5 && (
+                <details className="mt-1">
+                  <summary className="cursor-pointer font-medium">Show all {result.errors.length} errors</summary>
+                  <div className="mt-1 space-y-1">
+                    {result.errors.slice(5).map((item, index) => <p key={index}>{item}</p>)}
+                  </div>
+                </details>
+              )}
             </div>
           )}
           {result.syllabi.created + result.syllabi.replaced === 0 && (

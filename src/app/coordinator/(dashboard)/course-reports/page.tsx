@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { STATUS_LABELS, STATUS_COLORS } from "@/lib/constants";
 
 interface CourseReportRow {
   id: string;
@@ -17,23 +18,14 @@ interface CourseReportRow {
   _count: { comments: number };
 }
 
-const labels: Record<string, string> = {
-  SUBMITTED: "Pending approval",
-  APPROVED: "Approved",
-  NEEDS_REVISION: "Needs revision",
-  DRAFT: "Draft",
-};
-
-const styles: Record<string, string> = {
-  SUBMITTED: "bg-blue-100 text-blue-700",
-  APPROVED: "bg-green-100 text-green-700",
-  NEEDS_REVISION: "bg-amber-100 text-amber-700",
-  DRAFT: "bg-gray-100 text-gray-700",
-};
+const labels = STATUS_LABELS;
+const styles = STATUS_COLORS;
 
 export default function CoordinatorCourseReportsPage() {
   const [reports, setReports] = useState<CourseReportRow[]>([]);
   const [statusFilter, setStatusFilter] = useState("SUBMITTED");
+  const [majorFilter, setMajorFilter] = useState("");
+  const [instructorFilter, setInstructorFilter] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -54,8 +46,18 @@ export default function CoordinatorCourseReportsPage() {
     revision: reports.filter((report) => report.status === "NEEDS_REVISION").length,
     approved: reports.filter((report) => report.status === "APPROVED").length,
   }), [reports]);
+  const majors = useMemo(
+    () => Array.from(new Set(reports.map((report) => report.courseOffering.course.major.name))).sort(),
+    [reports]
+  );
+  const instructors = useMemo(
+    () => Array.from(new Set(reports.map((report) => report.instructor.name))).sort(),
+    [reports]
+  );
   const filtered = reports.filter((report) => {
     if (statusFilter && report.status !== statusFilter) return false;
+    if (majorFilter && report.courseOffering.course.major.name !== majorFilter) return false;
+    if (instructorFilter && report.instructor.name !== instructorFilter) return false;
     const normalized = search.trim().toLowerCase();
     if (!normalized) return true;
     const haystack = `${report.courseOffering.course.code} ${report.courseOffering.course.name} ${report.courseOffering.course.major.name} ${report.instructor.name}`.toLowerCase();
@@ -86,10 +88,26 @@ export default function CoordinatorCourseReportsPage() {
               {status ? labels[status] : "All"}
             </button>
           ))}
+          <select
+            value={majorFilter}
+            onChange={(event) => setMajorFilter(event.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-700"
+          >
+            <option value="">All majors</option>
+            {majors.map((major) => <option key={major} value={major}>{major}</option>)}
+          </select>
+          <select
+            value={instructorFilter}
+            onChange={(event) => setInstructorFilter(event.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-700"
+          >
+            <option value="">All instructors</option>
+            {instructors.map((instructor) => <option key={instructor} value={instructor}>{instructor}</option>)}
+          </select>
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search course, major, or instructor..."
+            placeholder="Search course code or name..."
             className="min-w-72 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs"
           />
         </div>

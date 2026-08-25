@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { STATUS_LABELS, STATUS_COLORS } from "@/lib/constants";
 
 interface ReportRow {
   id: string;
@@ -12,21 +13,8 @@ interface ReportRow {
   counts: { enrollments: number; blueprints: number; gradeAssessments: number };
 }
 
-const statusLabels: Record<string, string> = {
-  DRAFT: "Draft",
-  SUBMITTED: "Pending approval",
-  APPROVED: "Approved",
-  NEEDS_REVISION: "Needs revision",
-  NOT_STARTED: "Not started",
-};
-
-const statusStyles: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-700",
-  SUBMITTED: "bg-blue-100 text-blue-700",
-  APPROVED: "bg-green-100 text-green-700",
-  NEEDS_REVISION: "bg-amber-100 text-amber-700",
-  NOT_STARTED: "bg-gray-100 text-gray-500",
-};
+const statusLabels = STATUS_LABELS;
+const statusStyles = STATUS_COLORS;
 
 export default function InstructorCourseReportsPage() {
   const [rows, setRows] = useState<ReportRow[]>([]);
@@ -77,11 +65,11 @@ export default function InstructorCourseReportsPage() {
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-            <Metric label="Needs revision" value={counts.revision} tone="amber" />
-            <Metric label="Pending approval" value={counts.pending} tone="blue" />
-            <Metric label="Draft" value={counts.draft} tone="gray" />
-            <Metric label="Approved" value={counts.approved} tone="green" />
-            <Metric label="Not started" value={counts.notStarted} tone="gray" />
+            <Metric label={STATUS_LABELS.NEEDS_REVISION} value={counts.revision} tone="amber" />
+            <Metric label={STATUS_LABELS.SUBMITTED} value={counts.pending} tone="blue" />
+            <Metric label={STATUS_LABELS.DRAFT} value={counts.draft} tone="gray" />
+            <Metric label={STATUS_LABELS.APPROVED} value={counts.approved} tone="green" />
+            <Metric label={STATUS_LABELS.NOT_STARTED} value={counts.notStarted} tone="gray" />
           </div>
           <ReportTable title="Active Term" rows={activeRows} empty="No active-term course reports yet." />
           {archiveRows.length > 0 && <ReportTable title="Archive / Read Only" rows={archiveRows} empty="No archived course reports." />}

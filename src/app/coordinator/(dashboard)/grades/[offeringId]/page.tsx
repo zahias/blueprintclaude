@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import GradeDistributionChart from "@/components/GradeDistributionChart";
 import { getGradeInsights, getGradeStats, getLetterGrade, getStudentWeightedPercent } from "@/lib/grades";
+import { statusLabel } from "@/lib/constants";
 
 interface GradebookAssessment {
   id: string;
@@ -55,6 +56,7 @@ export default function CoordinatorGradeReviewDetailPage({ params }: { params: P
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function load() {
@@ -84,6 +86,7 @@ export default function CoordinatorGradeReviewDetailPage({ params }: { params: P
   async function review(status: "APPROVED" | "NEEDS_REVISION") {
     setSubmitting(true);
     setError("");
+    setMessage("");
     const res = await fetch(`/api/coordinator/grades/${offeringId}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -92,6 +95,7 @@ export default function CoordinatorGradeReviewDetailPage({ params }: { params: P
     const data = await res.json();
     if (res.ok) {
       setComment("");
+      setMessage(status === "APPROVED" ? "Gradebook approved." : "Revision requested. The instructor has been notified.");
       await load();
     } else {
       setError(data.error || "Review failed");
@@ -118,9 +122,11 @@ export default function CoordinatorGradeReviewDetailPage({ params }: { params: P
             </p>
           </div>
           <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${statusBadge(gradebook.status)}`}>
-            {gradebook.status.replace("_", " ")}
+            {statusLabel(gradebook.status)}
           </span>
         </div>
+
+        {message && <div className="mt-4 bg-green-50 text-green-700 border border-green-200 rounded-lg px-3 py-2 text-sm">{message}</div>}
 
         {gradebook.status === "SUBMITTED" && (
           <div className="mt-4 pt-4 border-t border-gray-200">

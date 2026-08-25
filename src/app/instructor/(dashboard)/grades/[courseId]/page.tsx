@@ -3,6 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import GradeDistributionChart from "@/components/GradeDistributionChart";
+import { STATUS_COLORS, statusLabel } from "@/lib/constants";
 import { assessmentWeightTotal, getGradeDistribution, getGradeInsights, getGradeStats, getLetterGrade, getStudentWeightedPercent, GRADE_SCALE } from "@/lib/grades";
 
 interface Student {
@@ -66,24 +67,11 @@ interface Gradebook {
 }
 
 function statusBadge(status: string) {
-  const styles: Record<string, string> = {
-    DRAFT: "bg-gray-100 text-gray-700",
-    SUBMITTED: "bg-blue-100 text-blue-700",
-    APPROVED: "bg-green-100 text-green-700",
-    NEEDS_REVISION: "bg-amber-100 text-amber-700",
-  };
-  return styles[status] || styles.DRAFT;
+  return STATUS_COLORS[status] || STATUS_COLORS.DRAFT;
 }
 
 function gradebookStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    NOT_STARTED: "Not started",
-    DRAFT: "Draft",
-    SUBMITTED: "Pending approval",
-    APPROVED: "Approved",
-    NEEDS_REVISION: "Needs revision",
-  };
-  return labels[status] || status.replace("_", " ");
+  return statusLabel(status);
 }
 
 export default function InstructorCourseGradebookPage({ params }: { params: Promise<{ courseId: string }> }) {
