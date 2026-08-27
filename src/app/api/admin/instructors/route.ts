@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getAdminFromCookies } from "@/lib/auth";
+import { getVerifiedAdmin } from "@/lib/session.server";
 import { hashPassword } from "@/lib/instructorAuth";
 
 export async function GET() {
-  const admin = await getAdminFromCookies();
+  const admin = await getVerifiedAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const instructors = await prisma.instructor.findMany({
@@ -25,7 +25,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const admin = await getAdminFromCookies();
+  const admin = await getVerifiedAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { email, password, name } = await req.json();

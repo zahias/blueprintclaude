@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BLOOM_LEVELS, QUESTION_TYPES } from "@/lib/constants";
+import { BLOOM_LEVELS } from "@/lib/constants";
 import type { BlueprintTopicEntry } from "@/lib/types";
 import HelpTooltip from "@/components/HelpTooltip";
 
@@ -23,429 +23,316 @@ interface TopicBuilderProps {
   onChange: (entries: BlueprintTopicEntry[]) => void;
 }
 
-function emptyEntry(): BlueprintTopicEntry {
+type BloomPreset = NonNullable<BlueprintTopicEntry["bloomPreset"]>;
+
+const PRESETS: { value: BloomPreset; label: string; description: string; weights: number[] | null }[] = [
+  { value: "BALANCED", label: "Balanced", description: "Evenly spreads questions across all Bloom levels.", weights: [1, 1, 1, 1, 1, 1] },
+  { value: "FOUNDATIONAL", label: "Foundational", description: "Emphasizes Remember, Understand, and Apply.", weights: [3, 3, 2, 1, 1, 0] },
+  { value: "HIGHER_ORDER", label: "Higher Order", description: "Emphasizes Analyze, Evaluate, and Create.", weights: [0, 1, 1, 2, 3, 3] },
+  { value: "CUSTOM", label: "Custom", description: "Manual Bloom counts.", weights: null },
+];
+
+function distributeWeighted(total: number, weights: number[]) {
+  if (total <= 0) return [0, 0, 0, 0, 0, 0];
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  if (weightTotal <= 0) return [0, 0, 0, 0, 0, total];
+
+  const raw = weights.map((weight) => (total * weight) / weightTotal);
+  const values = raw.map(Math.floor);
+  let remaining = total - values.reduce((sum, value) => sum + value, 0);
+  const order = raw
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction);
+
+  for (const item of order) {
+    if (remaining <= 0) break;
+    values[item.index]++;
+    remaining--;
+  }
+
+  return values;
+}
+
+function bloomValues(questionCount: number, preset: BloomPreset) {
+  const selected = PRESETS.find((item) => item.value === preset) || PRESETS[0];
+  const values = distributeWeighted(questionCount, selected.weights || PRESETS[0].weights!);
   return {
-    topicId: "",
-    questionCount: 0,
-    totalPoints: 0,
-    bloomRemember: 0,
-    bloomUnderstand: 0,
-    bloomApply: 0,
-    bloomAnalyze: 0,
-    bloomEvaluate: 0,
-    bloomCreate: 0,
-    questionTypes: [],
+    bloomRemember: values[0],
+    bloomUnderstand: values[1],
+    bloomApply: values[2],
+    bloomAnalyze: values[3],
+    bloomEvaluate: values[4],
+    bloomCreate: values[5],
   };
 }
 
-const LOT_LEVELS = BLOOM_LEVELS.slice(0, 3); // Remember, Understand, Apply
-const HOT_LEVELS = BLOOM_LEVELS.slice(3);     // Analyze, Evaluate, Create
-
-function CollapsibleSection({
-  title,
-  badge,
-  badgeColor,
-  remaining,
-  defaultOpen = false,
-  invalid = false,
-  children,
-}: {
-  title: string;
-  badge: string;
-  badgeColor: "green" | "red" | "gray";
-  remaining?: number;
-  defaultOpen?: boolean;
-  invalid?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const colors = {
-    green: "bg-green-100 text-green-700",
-    red: "bg-red-100 text-red-700",
-    gray: "bg-gray-100 text-gray-500",
+function entryForTopic(topicId: string): BlueprintTopicEntry {
+  return {
+    topicId,
+    questionCount: 0,
+    totalPoints: 0,
+    bloomPreset: "BALANCED",
+    ...bloomValues(0, "BALANCED"),
   };
+}
+
+function getBloomSum(entry: BlueprintTopicEntry) {
+  return (
+    entry.bloomRemember +
+    entry.bloomUnderstand +
+    entry.bloomApply +
+    entry.bloomAnalyze +
+    entry.bloomEvaluate +
+    entry.bloomCreate
+  );
+}
+
+function BloomDetails({
+  entry,
+  onChange,
+}: {
+  entry: BlueprintTopicEntry;
+  onChange: (partial: Partial<BlueprintTopicEntry>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const bloomSum = getBloomSum(entry);
+  const valid = entry.questionCount === 0 || bloomSum === entry.questionCount;
+  const remaining = entry.questionCount - bloomSum;
 
   return (
-    <div className={`border rounded-lg overflow-hidden transition-colors ${invalid ? "border-red-300 bg-red-50/30" : "border-gray-200"}`}>
+    <div className={`rounded-xl border ${valid ? "border-gray-200" : "border-red-300 bg-red-50/30"}`}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-gray-50/50 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-gray-50/60 transition"
       >
-        <span className="text-xs font-medium text-gray-700">{title}</span>
+        <span className="text-xs font-medium text-gray-700">Advanced Bloom details</span>
         <div className="flex items-center gap-2">
-          {remaining !== undefined && remaining !== 0 && (
+          {remaining !== 0 && (
             <span className={`text-[11px] font-medium ${remaining > 0 ? "text-amber-600" : "text-red-600"}`}>
               {remaining > 0 ? `${remaining} left` : `${Math.abs(remaining)} over`}
             </span>
           )}
-          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${colors[badgeColor]}`}>
-            {badge}
+          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${valid ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+            {entry.questionCount > 0 ? `${bloomSum}/${entry.questionCount}` : "—"}
           </span>
-          <svg
-            className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
-            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-          >
+          <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
       </button>
-      {open && <div className="px-3 pb-3 pt-1">{children}</div>}
+      {open && (
+        <div className="px-3 pb-3 pt-1">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {BLOOM_LEVELS.map((bloom) => {
+              const key = bloom.key as keyof BlueprintTopicEntry;
+              const value = entry[key] as number;
+              return (
+                <div key={bloom.key}>
+                  <label className="block text-[11px] font-medium text-gray-600 mb-1 flex items-center gap-1">
+                    {bloom.label}
+                    <HelpTooltip text={bloom.description} />
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={value || ""}
+                    onChange={(event) => onChange({ [bloom.key]: parseInt(event.target.value) || 0, bloomPreset: "CUSTOM" })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                    placeholder="0"
+                  />
+                  <div
+                    className="h-1 rounded-full mt-1"
+                    style={{ backgroundColor: bloom.color, opacity: 0.3 + (value / Math.max(entry.questionCount, 1)) * 0.7 }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function TopicBuilder({ topics, entries, onChange }: TopicBuilderProps) {
-  function addEntry() {
-    onChange([...entries, emptyEntry()]);
-  }
+  const selectedIds = new Set(entries.map((entry) => entry.topicId));
 
-  function updateEntry(index: number, partial: Partial<BlueprintTopicEntry>) {
-    const updated = entries.map((e, i) => (i === index ? { ...e, ...partial } : e));
-    onChange(updated);
-  }
-
-  function removeEntry(index: number) {
-    onChange(entries.filter((_, i) => i !== index));
-  }
-
-  function updateQType(entryIndex: number, qType: string, count: number) {
-    const entry = entries[entryIndex];
-    const existing = entry.questionTypes.filter((qt) => qt.questionType !== qType);
-    if (count > 0) {
-      existing.push({ questionType: qType, count });
+  function syncTopics(topicId: string, selected: boolean) {
+    if (selected) {
+      const next = [...entries, entryForTopic(topicId)];
+      onChange(topics.map((topic) => next.find((entry) => entry.topicId === topic.id)).filter(Boolean) as BlueprintTopicEntry[]);
+    } else {
+      onChange(entries.filter((entry) => entry.topicId !== topicId));
     }
-    updateEntry(entryIndex, { questionTypes: existing });
   }
 
-  function distribute(total: number, slots: number) {
-    if (total <= 0) return Array.from({ length: slots }, () => 0);
-    const base = Math.floor(total / slots);
-    const remainder = total % slots;
-    return Array.from({ length: slots }, (_, i) => base + (i < remainder ? 1 : 0));
+  function updateEntry(topicId: string, partial: Partial<BlueprintTopicEntry>) {
+    onChange(entries.map((entry) => (entry.topicId === topicId ? { ...entry, ...partial } : entry)));
   }
 
-  function applyEvenBloom(index: number) {
-    const values = distribute(entries[index].questionCount, BLOOM_LEVELS.length);
-    updateEntry(index, {
-      bloomRemember: values[0],
-      bloomUnderstand: values[1],
-      bloomApply: values[2],
-      bloomAnalyze: values[3],
-      bloomEvaluate: values[4],
-      bloomCreate: values[5],
+  function updateQuestionCount(entry: BlueprintTopicEntry, value: number) {
+    const preset = entry.bloomPreset || "BALANCED";
+    updateEntry(entry.topicId, {
+      questionCount: value,
+      ...(preset === "CUSTOM" ? {} : bloomValues(value, preset)),
     });
   }
 
-  function applyHotLotBloom(index: number) {
-    const questionCount = entries[index].questionCount;
-    const lotTotal = Math.round(questionCount * 0.4);
-    const hotTotal = Math.max(0, questionCount - lotTotal);
-    const lot = distribute(lotTotal, LOT_LEVELS.length);
-    const hot = distribute(hotTotal, HOT_LEVELS.length);
-    updateEntry(index, {
-      bloomRemember: lot[0],
-      bloomUnderstand: lot[1],
-      bloomApply: lot[2],
-      bloomAnalyze: hot[0],
-      bloomEvaluate: hot[1],
-      bloomCreate: hot[2],
+  function updatePreset(entry: BlueprintTopicEntry, preset: BloomPreset) {
+    updateEntry(entry.topicId, {
+      bloomPreset: preset,
+      ...(preset === "CUSTOM" ? {} : bloomValues(entry.questionCount, preset)),
     });
   }
 
-  function applyEvenQuestionTypes(index: number) {
-    const values = distribute(entries[index].questionCount, QUESTION_TYPES.length);
-    updateEntry(index, {
-      questionTypes: QUESTION_TYPES.map((qt, i) => ({
-        questionType: qt.value,
-        count: values[i],
-      })).filter((qt) => qt.count > 0),
-    });
-  }
-
-  function getBloomSum(entry: BlueprintTopicEntry) {
-    return (
-      entry.bloomRemember +
-      entry.bloomUnderstand +
-      entry.bloomApply +
-      entry.bloomAnalyze +
-      entry.bloomEvaluate +
-      entry.bloomCreate
-    );
-  }
-
-  function getQTypeSum(entry: BlueprintTopicEntry) {
-    return entry.questionTypes.reduce((sum, qt) => sum + qt.count, 0);
-  }
+  const orderedEntries = topics
+    .map((topic) => entries.find((entry) => entry.topicId === topic.id))
+    .filter(Boolean) as BlueprintTopicEntry[];
 
   return (
-    <div className="space-y-4">
-      {entries.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-xl border-2 border-dashed border-gray-300">
-          <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center mx-auto mb-3">
-            <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </div>
-          <p className="text-gray-500 mb-1 font-medium">No topics added yet</p>
-          <p className="text-gray-400 text-sm mb-4">Start building your blueprint by adding a topic</p>
-          <button
-            onClick={addEntry}
-            className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
-          >
-            + Add First Topic
-          </button>
+    <div className="space-y-5">
+      <section className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">1. Target Topics</p>
+          <h3 className="mt-1 font-semibold text-gray-900">Choose what this exam covers</h3>
+          <p className="mt-1 text-sm text-gray-500">Select all course topics targeted by this blueprint. The next section creates one allocation row per topic.</p>
         </div>
-      )}
-
-      {entries.map((entry, index) => {
-        const selectedTopic = topics.find((t) => t.id === entry.topicId);
-        const bloomSum = getBloomSum(entry);
-        const qTypeSum = getQTypeSum(entry);
-        const bloomValid = entry.questionCount === 0 || bloomSum === entry.questionCount;
-        const qTypeValid = entry.questionCount === 0 || qTypeSum === entry.questionCount;
-        const hasQuestions = entry.questionCount > 0;
-        const bloomRemaining = entry.questionCount - bloomSum;
-        const qTypeRemaining = entry.questionCount - qTypeSum;
-
-        return (
-          <div key={index} className="bg-white rounded-xl border border-gray-200 shadow-sm">
-            {/* Header — always visible */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-              <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                  {index + 1}
-                </span>
-                <h3 className="font-semibold text-gray-900">
-                  {selectedTopic ? selectedTopic.name : "New Topic"}
-                </h3>
-                {selectedTopic && selectedTopic.los.length > 0 && (
-                  <div className="flex gap-1 ml-1">
-                    {selectedTopic.los.map((l) => (
-                      <span key={l.learningOutcomeId} className="bg-green-100 text-green-700 text-[10px] font-mono px-1.5 py-0.5 rounded">
-                        {l.learningOutcome.code}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-5">
+          {topics.map((topic) => {
+            const selected = selectedIds.has(topic.id);
+            return (
               <button
-                onClick={() => removeEntry(index)}
-                className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition"
-                title="Remove topic"
+                key={topic.id}
+                type="button"
+                onClick={() => syncTopics(topic.id, !selected)}
+                className={`text-left rounded-xl border px-4 py-3 transition ${
+                  selected
+                    ? "border-indigo-300 bg-indigo-50"
+                    : "border-gray-200 bg-white hover:border-indigo-200 hover:bg-gray-50"
+                }`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              {/* Topic select + counts — compact row */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Topic</label>
-                  <select
-                    value={entry.topicId}
-                    onChange={(e) => updateEntry(index, { topicId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                  >
-                    <option value="">Select topic...</option>
-                    {topics.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1"># of Questions</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={entry.questionCount || ""}
-                    onChange={(e) => updateEntry(index, { questionCount: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Total Points</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.5"
-                    value={entry.totalPoints || ""}
-                    onChange={(e) => updateEntry(index, { totalPoints: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              {/* Bloom's Distribution — collapsible */}
-              <CollapsibleSection
-                title="Bloom's Distribution"
-                badge={hasQuestions ? `${bloomSum}/${entry.questionCount}` : "—"}
-                badgeColor={!hasQuestions ? "gray" : bloomValid ? "green" : "red"}
-                remaining={hasQuestions ? bloomRemaining : undefined}
-                defaultOpen={hasQuestions && !bloomValid}
-                invalid={hasQuestions && !bloomValid}
-              >
-                <p className="text-[11px] text-gray-400 mb-3">
-                  Distribute questions across cognitive levels. Total must equal {entry.questionCount || "# of questions"}.
-                </p>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => applyEvenBloom(index)}
-                    disabled={!hasQuestions}
-                    className="px-2.5 py-1.5 bg-gray-100 text-gray-700 rounded text-xs font-medium hover:bg-gray-200 transition disabled:opacity-50"
-                  >
-                    Even Split
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyHotLotBloom(index)}
-                    disabled={!hasQuestions}
-                    className="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium hover:bg-indigo-100 transition disabled:opacity-50"
-                  >
-                    40/60 LOT-HOT
-                  </button>
-                </div>
-
-                {/* LOT group */}
-                <div className="mb-3">
-                  <div className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider mb-1.5">
-                    Lower-Order Thinking (LOT)
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {LOT_LEVELS.map((bloom) => {
-                      const key = bloom.key as keyof BlueprintTopicEntry;
-                      const val = entry[key] as number;
-                      return (
-                        <div key={bloom.key} className="relative">
-                          <label className="block text-[11px] font-medium text-gray-600 mb-1 flex items-center gap-1">
-                            {bloom.label}
-                            <HelpTooltip text={bloom.description} />
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={val || ""}
-                            onChange={(e) =>
-                              updateEntry(index, { [bloom.key]: parseInt(e.target.value) || 0 })
-                            }
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center focus:ring-2 focus:ring-indigo-500 outline-none"
-                            placeholder="0"
-                          />
-                          <div
-                            className="h-1 rounded-full mt-1"
-                            style={{ backgroundColor: bloom.color, opacity: 0.3 + (val / Math.max(entry.questionCount, 1)) * 0.7 }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* HOT group */}
-                <div>
-                  <div className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider mb-1.5">
-                    Higher-Order Thinking (HOT)
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {HOT_LEVELS.map((bloom) => {
-                      const key = bloom.key as keyof BlueprintTopicEntry;
-                      const val = entry[key] as number;
-                      return (
-                        <div key={bloom.key} className="relative">
-                          <label className="block text-[11px] font-medium text-gray-600 mb-1 flex items-center gap-1">
-                            {bloom.label}
-                            <HelpTooltip text={bloom.description} />
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={val || ""}
-                            onChange={(e) =>
-                              updateEntry(index, { [bloom.key]: parseInt(e.target.value) || 0 })
-                            }
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center focus:ring-2 focus:ring-indigo-500 outline-none"
-                            placeholder="0"
-                          />
-                          <div
-                            className="h-1 rounded-full mt-1"
-                            style={{ backgroundColor: bloom.color, opacity: 0.3 + (val / Math.max(entry.questionCount, 1)) * 0.7 }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </CollapsibleSection>
-
-              {/* Question Types — collapsible, checkbox-first */}
-              <CollapsibleSection
-                title="Question Types"
-                badge={hasQuestions ? `${qTypeSum}/${entry.questionCount}` : "—"}
-                badgeColor={!hasQuestions ? "gray" : qTypeValid ? "green" : "red"}
-                remaining={hasQuestions ? qTypeRemaining : undefined}
-                defaultOpen={hasQuestions && !qTypeValid}
-                invalid={hasQuestions && !qTypeValid}
-              >
-                <p className="text-[11px] text-gray-400 mb-3">
-                  Set the number of questions for each type. Total must equal {entry.questionCount || "# of questions"}.
-                </p>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => applyEvenQuestionTypes(index)}
-                    disabled={!hasQuestions}
-                    className="px-2.5 py-1.5 bg-gray-100 text-gray-700 rounded text-xs font-medium hover:bg-gray-200 transition disabled:opacity-50"
-                  >
-                    Even Split
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {QUESTION_TYPES.map((qt) => {
-                    const existing = entry.questionTypes.find((x) => x.questionType === qt.value);
-                    return (
-                      <div key={qt.value} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                        <label className="text-xs text-gray-600 flex-1 flex items-center gap-1">
-                          {qt.label}
-                          <HelpTooltip text={qt.description} />
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={existing?.count || ""}
-                          onChange={(e) => updateQType(index, qt.value, parseInt(e.target.value) || 0)}
-                          className="w-14 px-2 py-1 border border-gray-300 rounded text-xs text-center focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                          placeholder="0"
-                        />
+                <div className="flex items-start gap-3">
+                  <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs ${
+                    selected ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-300 text-transparent"
+                  }`}>
+                    ✓
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900">{topic.name}</p>
+                    {topic.los.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {topic.los.map((lo) => (
+                          <span key={lo.learningOutcomeId} className="bg-green-50 text-green-700 font-mono text-[11px] px-1.5 py-0.5 rounded">
+                            {lo.learningOutcome.code}
+                          </span>
+                        ))}
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
-              </CollapsibleSection>
-            </div>
-          </div>
-        );
-      })}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
-      {entries.length > 0 && (
-        <button
-          onClick={addEntry}
-          className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/50 transition text-sm font-medium flex items-center justify-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Another Topic
-        </button>
-      )}
+      <section className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">2. Allocate Questions, Points, and Bloom</p>
+          <h3 className="mt-1 font-semibold text-gray-900">Set the assessment weight by topic</h3>
+          <p className="mt-1 text-sm text-gray-500">Use presets for fast Bloom distribution. Open advanced details only when manual adjustment is needed.</p>
+        </div>
+
+        {orderedEntries.length === 0 ? (
+          <div className="px-5 py-12 text-center text-sm text-gray-500">
+            Select one or more target topics above to start allocating questions and points.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {orderedEntries.map((entry, index) => {
+              const topic = topics.find((item) => item.id === entry.topicId);
+              const preset = entry.bloomPreset || "BALANCED";
+
+              return (
+                <div key={entry.topicId} className="p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                          {index + 1}
+                        </span>
+                        <h4 className="font-semibold text-gray-900">{topic?.name || "Selected topic"}</h4>
+                      </div>
+                      {topic && topic.los.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1 pl-9">
+                          {topic.los.map((lo) => (
+                            <span key={lo.learningOutcomeId} className="bg-green-50 text-green-700 font-mono text-[11px] px-1.5 py-0.5 rounded">
+                              {lo.learningOutcome.code}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => syncTopics(entry.topicId, false)}
+                      className="self-start text-sm text-gray-400 hover:text-red-600 transition"
+                    >
+                      Remove
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 rounded-xl bg-gray-50 p-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Questions</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={entry.questionCount || ""}
+                        onChange={(event) => updateQuestionCount(entry, parseInt(event.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Points</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.5"
+                        value={entry.totalPoints || ""}
+                        onChange={(event) => updateEntry(entry.topicId, { totalPoints: parseFloat(event.target.value) || 0 })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Bloom Preset</label>
+                      <select
+                        value={preset}
+                        onChange={(event) => updatePreset(entry, event.target.value as BloomPreset)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                      >
+                        {PRESETS.map((item) => (
+                          <option key={item.value} value={item.value}>{item.label}</option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {PRESETS.find((item) => item.value === preset)?.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <BloomDetails entry={entry} onChange={(partial) => updateEntry(entry.topicId, partial)} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

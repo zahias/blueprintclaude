@@ -13,7 +13,6 @@ interface Coordinator {
   email: string;
   isActive: boolean;
   createdAt: string;
-  _count: { comments: number };
   assignedMajors: Major[];
 }
 
@@ -26,11 +25,24 @@ export default function CoordinatorsPage() {
   const [saving, setSaving] = useState(false);
   const [allMajors, setAllMajors] = useState<Major[]>([]);
   const [togglingMajor, setTogglingMajor] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   async function load() {
-    const res = await fetch("/api/admin/coordinators");
-    if (res.ok) setCoordinators(await res.json());
-    setLoading(false);
+    try {
+      const res = await fetch("/api/admin/coordinators");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setLoadError("Could not load coordinators. Please refresh the page.");
+      } else {
+        setLoadError("");
+        setCoordinators(data);
+      }
+    } catch {
+      setLoadError("Network error while loading coordinators.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadMajors() {
@@ -76,6 +88,12 @@ export default function CoordinatorsPage() {
     load();
   }
 
+  const filteredCoordinators = coordinators.filter((coord) => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return true;
+    return `${coord.name} ${coord.email}`.toLowerCase().includes(normalized);
+  });
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
@@ -114,6 +132,10 @@ export default function CoordinatorsPage() {
           {showForm ? "Cancel" : "+ Add Coordinator"}
         </button>
       </div>
+
+      {loadError && (
+        <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-2 text-sm mb-4">{loadError}</div>
+      )}
 
       {/* Create form */}
       {showForm && (
@@ -171,6 +193,16 @@ export default function CoordinatorsPage() {
       ) : coordinators.length === 0 ? (
         <div className="text-center py-12 text-gray-500">No coordinators yet. Add one above.</div>
       ) : (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name or email..."
+              className="w-72 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+            <span className="text-xs text-gray-400">{filteredCoordinators.length} of {coordinators.length} coordinator{coordinators.length === 1 ? "" : "s"}</span>
+          </div>
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -178,13 +210,14 @@ export default function CoordinatorsPage() {
                 <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Name</th>
                 <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Email</th>
                 <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Majors</th>
-                <th className="text-center px-6 py-3 text-sm font-medium text-gray-500">Reviews</th>
                 <th className="text-center px-6 py-3 text-sm font-medium text-gray-500">Status</th>
                 <th className="text-right px-6 py-3 text-sm font-medium text-gray-500">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {coordinators.map((coord) => (
+              {filteredCoordinators.length === 0 ? (
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">No coordinators match &quot;{search}&quot;.</td></tr>
+              ) : filteredCoordinators.map((coord) => (
                 <tr key={coord.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium text-gray-900">{coord.name}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{coord.email}</td>
@@ -211,7 +244,6 @@ export default function CoordinatorsPage() {
                       })}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-center text-gray-700">{coord._count.comments}</td>
                   <td className="px-6 py-4 text-center">
                     <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
                       coord.isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
@@ -236,6 +268,7 @@ export default function CoordinatorsPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

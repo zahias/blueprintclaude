@@ -7,12 +7,55 @@ export const BLOOM_LEVELS = [
   { key: "bloomCreate", label: "Create", color: "#8b5cf6", description: "Produce new or original work. Verbs: design, assemble, construct, develop, formulate, author." },
 ] as const;
 
-export const QUESTION_TYPES = [
-  { value: "MCQ", label: "Multiple Choice", description: "Questions with several options and one correct answer. Best for testing recall, comprehension, and application." },
-  { value: "SHORT_ANSWER", label: "Short Answer", description: "Brief written responses (a few words to a sentence). Good for testing specific knowledge and understanding." },
-  { value: "ESSAY", label: "Essay", description: "Extended written responses requiring analysis, synthesis, or evaluation. Best for higher-order thinking." },
-  { value: "TRUE_FALSE", label: "True/False", description: "Statements that students mark as true or false. Useful for quick recall and factual assessment." },
-  { value: "PROBLEM_SOLVING", label: "Problem Solving", description: "Questions requiring multi-step solutions, calculations, or procedures. Ideal for application and analysis." },
+export const QUESTION_FORMATS = [
+  { value: "MULTIPLE_CHOICE", label: "Multiple Choice", group: "CLOSED_ENDED" },
+  { value: "TRUE_FALSE", label: "True/False", group: "CLOSED_ENDED" },
+  { value: "MATCHING", label: "Matching", group: "CLOSED_ENDED" },
+  { value: "FILL_IN_BLANK", label: "Fill in the Blank", group: "CLOSED_ENDED" },
+  { value: "SHORT_ANSWER", label: "Short Answer", group: "OPEN_ENDED" },
+  { value: "ESSAY", label: "Essay", group: "OPEN_ENDED" },
+  { value: "CASE_SCENARIO", label: "Case/Scenario", group: "OPEN_ENDED" },
+  { value: "PROBLEM_SOLVING", label: "Problem Solving", group: "OPEN_ENDED" },
+  { value: "ORAL_PRACTICAL", label: "Oral/Practical", group: "OPEN_ENDED" },
+  { value: "OTHER", label: "Other", group: "OPEN_ENDED" },
+] as const;
+
+export const COURSE_PROGRESS_REPORT_PROMPTS = [
+  {
+    key: "learningOutcomeEvidence",
+    title: "Learning Outcomes",
+    prompt: "Using examples from your teaching and learning practice in this semester, explain how you have met the learning outcomes set in the syllabus of this course.",
+  },
+  {
+    key: "studentCenteredness",
+    title: "Student-Centeredness and Participation",
+    prompt: "In working towards meeting the learning outcomes, how have you promoted student-centeredness and students' active participation in the teaching and learning process?",
+  },
+  {
+    key: "teachingMethods",
+    title: "Teaching Methods",
+    prompt: "What teaching methods have you adopted, such as inquiry-based learning, project-based learning, team-based learning, or other student-initiated learning activities? Explain the rationale behind each method and provide examples where applicable.",
+  },
+  {
+    key: "realLifeWorkplaceCommunity",
+    title: "Real-Life, Workplace, and Community Learning",
+    prompt: "How have you mapped your course to real-life examples and/or learning in the workplace and community?",
+  },
+  {
+    key: "technologyIntegration",
+    title: "Technology Integration",
+    prompt: "In what ways have you integrated technology in your classroom? List the ICT tools used to support students' understanding and active involvement.",
+  },
+  {
+    key: "differentiatedTeaching",
+    title: "Differentiated Teaching",
+    prompt: "How have you differentiated your teaching approach to respond to students' various needs and capabilities?",
+  },
+  {
+    key: "genericSkillsDevelopment",
+    title: "Generic Skills Development",
+    prompt: "In the context of your course, explain how you have worked on developing students' essential generic skills, such as critical thinking, problem solving, communication, organization, time management, and leadership.",
+  },
 ] as const;
 
 export const SEMESTERS = [
@@ -31,16 +74,27 @@ export function getAcademicYears(): string[] {
   return years;
 }
 
-export const BLUEPRINT_STATUS_LABELS: Record<string, string> = {
+// Canonical status vocabulary used everywhere a submission-style status is shown to a user.
+export const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
-  SUBMITTED: "Submitted",
+  SUBMITTED: "Pending Review",
   APPROVED: "Approved",
   NEEDS_REVISION: "Needs Revision",
+  NOT_STARTED: "Not Started",
 };
 
-export const BLUEPRINT_STATUS_COLORS: Record<string, string> = {
+export const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
   SUBMITTED: "bg-blue-100 text-blue-700",
   APPROVED: "bg-green-100 text-green-700",
   NEEDS_REVISION: "bg-amber-100 text-amber-700",
+  NOT_STARTED: "bg-gray-100 text-gray-500",
 };
+
+export function statusLabel(status: string | null | undefined): string {
+  if (!status) return STATUS_LABELS.NOT_STARTED;
+  return STATUS_LABELS[status] || status;
+}
+
+export const BLUEPRINT_STATUS_LABELS = STATUS_LABELS;
+export const BLUEPRINT_STATUS_COLORS = STATUS_COLORS;

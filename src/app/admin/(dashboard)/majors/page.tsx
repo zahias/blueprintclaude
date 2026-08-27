@@ -15,12 +15,22 @@ export default function MajorsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "" });
+  const [error, setError] = useState("");
 
   async function loadMajors() {
-    const res = await fetch("/api/majors");
-    const data = await res.json();
-    setMajors(data);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/majors");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setError("Could not load majors. Please refresh the page.");
+      } else {
+        setMajors(data);
+      }
+    } catch {
+      setError("Network error while loading majors.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -29,25 +39,47 @@ export default function MajorsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
     const url = editingId ? `/api/majors/${editingId}` : "/api/majors";
     const method = editingId ? "PUT" : "POST";
 
-    await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-
-    setForm({ name: "", description: "" });
-    setShowForm(false);
-    setEditingId(null);
-    loadMajors();
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not save major.");
+        return;
+      }
+      setForm({ name: "", description: "" });
+      setShowForm(false);
+      setEditingId(null);
+      await loadMajors();
+    } catch {
+      setError("Network error. Please try again.");
+    }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this major and all its courses?")) return;
-    await fetch(`/api/majors/${id}`, { method: "DELETE" });
-    loadMajors();
+  async function handleDelete(id: string, major: Major) {
+    const warning = major._count.courses > 0
+      ? `Delete "${major.name}"? This permanently removes all ${major._count.courses} of its courses, plus every offering, syllabus, blueprint, gradebook, and course report attached to them. This cannot be undone.`
+      : `Delete "${major.name}"? This cannot be undone.`;
+    if (!confirm(warning)) return;
+    setError("");
+    try {
+      const res = await fetch(`/api/majors/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not delete major.");
+        return;
+      }
+      await loadMajors();
+    } catch {
+      setError("Network error. Please try again.");
+    }
   }
 
   function startEdit(major: Major) {
@@ -71,6 +103,10 @@ export default function MajorsPage() {
           + Add Major
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-2 text-sm mb-4">{error}</div>
+      )}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 mb-6 space-y-4">
@@ -137,7 +173,7 @@ export default function MajorsPage() {
                   <td className="px-6 py-4 text-center text-gray-700">{major._count.courses}</td>
                   <td className="px-6 py-4 text-right space-x-2">
                     <button onClick={() => startEdit(major)} className="text-indigo-600 hover:text-indigo-800 text-sm">Edit</button>
-                    <button onClick={() => handleDelete(major.id)} className="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                    <button onClick={() => handleDelete(major.id, major)} className="text-red-600 hover:text-red-800 text-sm">Delete</button>
                   </td>
                 </tr>
               ))}

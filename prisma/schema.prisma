@@ -19,25 +19,35 @@ model Admin {
 }
 
 model Coordinator {
-  id           String              @id @default(uuid())
-  email        String              @unique
-  passwordHash String
-  name         String
-  isActive     Boolean             @default(true)
-  createdAt    DateTime            @default(now())
-  comments     ReviewComment[]
-  majors       CoordinatorMajor[]
+  id                       String                   @id @default(uuid())
+  email                    String                   @unique
+  passwordHash             String
+  name                     String
+  isActive                 Boolean                  @default(true)
+  createdAt                DateTime                 @default(now())
+  comments                 ReviewComment[]
+  gradebookComments        GradebookComment[]
+  reviewedGradebooks       Gradebook[]              @relation("GradebookReviewer")
+  reviewedGradeAssessments GradeAssessment[]        @relation("GradeAssessmentReviewer")
+  courseReportComments     CourseReportComment[]
+  reviewedCourseReports    CourseReport[]           @relation("CourseReportReviewer")
+  majors                   CoordinatorMajor[]
+  importedSyllabi          CourseSyllabus[]
+  activatedTerms           AcademicTerm[]           @relation("AcademicTermActivator")
 }
 
 model Instructor {
-  id           String            @id @default(uuid())
-  email        String            @unique
-  passwordHash String
-  name         String
-  isActive     Boolean           @default(true)
-  createdAt    DateTime          @default(now())
-  blueprints   Blueprint[]
-  majors       InstructorMajor[]
+  id               String                     @id @default(uuid())
+  email            String                     @unique
+  passwordHash     String
+  name             String
+  isActive         Boolean                    @default(true)
+  createdAt        DateTime                   @default(now())
+  blueprints       Blueprint[]
+  gradeAssessments GradeAssessment[]
+  courseReports    CourseReport[]
+  majors           InstructorMajor[]
+  courseOfferings  CourseOfferingInstructor[]
 }
 
 // ─── Academic Structure ─────────────────────────────────────────────────────────
@@ -71,40 +81,118 @@ model InstructorMajor {
 }
 
 model Course {
-  id          String            @id @default(uuid())
-  majorId     String
-  major       Major             @relation(fields: [majorId], references: [id], onDelete: Cascade)
-  code        String
-  name        String
-  description String?
-  createdAt   DateTime          @default(now())
-  topics      Topic[]
-  los         LearningOutcome[]
-  blueprints  Blueprint[]
+  id               String             @id @default(uuid())
+  majorId          String
+  major            Major              @relation(fields: [majorId], references: [id], onDelete: Cascade)
+  code             String
+  name             String
+  description      String?
+  createdAt        DateTime           @default(now())
+  topics           Topic[]
+  los              LearningOutcome[]
+  syllabi          CourseSyllabus[]
+  offerings        CourseOffering[]
+  blueprints       Blueprint[]
+  enrollments      CourseEnrollment[]
+  gradeAssessments GradeAssessment[]
 
   @@unique([majorId, code])
 }
 
+model AcademicTerm {
+  id            String           @id @default(uuid())
+  semester      Semester
+  academicYear  String
+  isActive      Boolean          @default(false)
+  activatedAt   DateTime?
+  activatedById String?
+  activatedBy   Coordinator?     @relation("AcademicTermActivator", fields: [activatedById], references: [id])
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  offerings     CourseOffering[]
+
+  @@unique([semester, academicYear])
+  @@index([isActive])
+}
+
+model CourseOffering {
+  id               String                     @id @default(uuid())
+  courseId         String
+  course           Course                     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  termId           String
+  term             AcademicTerm               @relation(fields: [termId], references: [id], onDelete: Cascade)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  instructors      CourseOfferingInstructor[]
+  syllabi          CourseSyllabus[]
+  blueprints       Blueprint[]
+  enrollments      CourseEnrollment[]
+  gradeAssessments GradeAssessment[]
+  gradebook        Gradebook?
+  courseReport     CourseReport?
+
+  @@unique([courseId, termId])
+}
+
+model CourseOfferingInstructor {
+  courseOfferingId String
+  courseOffering   CourseOffering @relation(fields: [courseOfferingId], references: [id], onDelete: Cascade)
+  instructorId     String
+  instructor       Instructor     @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  assignedAt       DateTime       @default(now())
+
+  @@id([courseOfferingId, instructorId])
+}
+
+model CourseSyllabus {
+  id               String            @id @default(uuid())
+  courseId         String
+  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseOfferingId String?
+  courseOffering   CourseOffering?   @relation(fields: [courseOfferingId], references: [id], onDelete: SetNull)
+  semester         Semester
+  academicYear     String
+  sourceFileName   String?
+  importedById     String?
+  importedBy       Coordinator?      @relation(fields: [importedById], references: [id])
+  isCurrent        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  topics           Topic[]
+  los              LearningOutcome[]
+
+  @@unique([courseId, semester, academicYear])
+  @@index([courseOfferingId])
+}
+
 model Topic {
-  id          String    @id @default(uuid())
-  courseId     String
-  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  sortOrder   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  los         TopicLO[]
+  id              String           @id @default(uuid())
+  courseId        String
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  syllabusId      String?
+  syllabus        CourseSyllabus?  @relation(fields: [syllabusId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  sortOrder       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  los             TopicLO[]
   blueprintTopics BlueprintTopic[]
+
+  @@index([courseId, syllabusId])
 }
 
 model LearningOutcome {
-  id          String    @id @default(uuid())
-  courseId     String
-  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  id          String          @id @default(uuid())
+  courseId    String
+  course      Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  syllabusId  String?
+  syllabus    CourseSyllabus? @relation(fields: [syllabusId], references: [id], onDelete: Cascade)
   code        String
   description String
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime        @default(now())
   topics      TopicLO[]
+
+  @@index([courseId, syllabusId])
 }
 
 model TopicLO {
@@ -131,58 +219,80 @@ enum Semester {
   SUMMER
 }
 
-enum QuestionType {
-  MCQ
-  SHORT_ANSWER
-  ESSAY
-  TRUE_FALSE
-  PROBLEM_SOLVING
-}
-
 model Blueprint {
-  id             String          @id @default(uuid())
-  courseId        String
-  course         Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  instructorId   String?
-  instructor     Instructor?     @relation(fields: [instructorId], references: [id])
-  instructorName String
-  title          String
-  semester       Semester?
-  academicYear   String?         // e.g. "2025/2026"
-  examDate       DateTime?
-  duration       Int?            // minutes
-  totalMarks     Float
-  status         BlueprintStatus @default(DRAFT)
-  accessToken    String          @unique @default(uuid())
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  topics         BlueprintTopic[]
-  comments       ReviewComment[]
+  id               String            @id @default(uuid())
+  courseId         String
+  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseOfferingId String?
+  courseOffering   CourseOffering?   @relation(fields: [courseOfferingId], references: [id], onDelete: SetNull)
+  instructorId     String?
+  instructor       Instructor?       @relation(fields: [instructorId], references: [id])
+  instructorName   String
+  title            String
+  semester         Semester?
+  academicYear     String? // e.g. "2025/2026"
+  examDate         DateTime?
+  duration         Int? // minutes
+  totalMarks       Float
+  status           BlueprintStatus   @default(DRAFT)
+  accessToken      String            @unique @default(uuid())
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  topics           BlueprintTopic[]
+  questionFormats  BlueprintQuestionFormat[]
+  comments         ReviewComment[]
+  gradeAssessments GradeAssessment[]
+
+  @@index([courseId, courseOfferingId])
+  @@index([instructorId, semester, academicYear])
 }
 
 model BlueprintTopic {
-  id              String                @id @default(uuid())
+  id              String    @id @default(uuid())
   blueprintId     String
-  blueprint       Blueprint             @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  blueprint       Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   topicId         String
-  topic           Topic                 @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  topic           Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
   questionCount   Int
   totalPoints     Float
-  bloomRemember   Int                   @default(0)
-  bloomUnderstand Int                   @default(0)
-  bloomApply      Int                   @default(0)
-  bloomAnalyze    Int                   @default(0)
-  bloomEvaluate   Int                   @default(0)
-  bloomCreate     Int                   @default(0)
-  questionTypes   BlueprintTopicQType[]
+  bloomRemember   Int       @default(0)
+  bloomUnderstand Int       @default(0)
+  bloomApply      Int       @default(0)
+  bloomAnalyze    Int       @default(0)
+  bloomEvaluate   Int       @default(0)
+  bloomCreate     Int       @default(0)
 }
 
-model BlueprintTopicQType {
-  id               String         @id @default(uuid())
-  blueprintTopicId String
-  blueprintTopic   BlueprintTopic @relation(fields: [blueprintTopicId], references: [id], onDelete: Cascade)
-  questionType     QuestionType
-  count            Int
+enum QuestionFormatGroup {
+  CLOSED_ENDED
+  OPEN_ENDED
+}
+
+enum QuestionFormatType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  MATCHING
+  FILL_IN_BLANK
+  SHORT_ANSWER
+  ESSAY
+  CASE_SCENARIO
+  PROBLEM_SOLVING
+  ORAL_PRACTICAL
+  OTHER
+}
+
+model BlueprintQuestionFormat {
+  id            String              @id @default(uuid())
+  blueprintId   String
+  blueprint     Blueprint           @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  formatType    QuestionFormatType
+  group         QuestionFormatGroup
+  label         String?
+  questionCount Int                 @default(0)
+  gradeWeight   Float               @default(0)
+  createdAt     DateTime            @default(now())
+
+  @@index([blueprintId])
 }
 
 model ReviewComment {
@@ -195,4 +305,152 @@ model ReviewComment {
   coordinator   Coordinator? @relation(fields: [coordinatorId], references: [id], onDelete: Cascade)
   content       String
   createdAt     DateTime     @default(now())
+}
+
+// ─── Gradebook ─────────────────────────────────────────────────────────────────
+
+enum GradeAssessmentStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  NEEDS_REVISION
+}
+
+enum GradebookStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  NEEDS_REVISION
+}
+
+model Student {
+  id                  String             @id @default(uuid())
+  universityStudentId String?            @unique
+  email               String?            @unique
+  firstName           String
+  lastName            String
+  displayName         String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  enrollments         CourseEnrollment[]
+  grades              GradeEntry[]
+}
+
+model CourseEnrollment {
+  id               String          @id @default(uuid())
+  courseId         String
+  course           Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseOfferingId String?
+  courseOffering   CourseOffering? @relation(fields: [courseOfferingId], references: [id], onDelete: Cascade)
+  studentId        String
+  student          Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([courseOfferingId, studentId])
+  @@index([courseId, studentId])
+}
+
+model GradeAssessment {
+  id               String                   @id @default(uuid())
+  courseId         String
+  course           Course                   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseOfferingId String?
+  courseOffering   CourseOffering?          @relation(fields: [courseOfferingId], references: [id], onDelete: SetNull)
+  instructorId     String
+  instructor       Instructor               @relation(fields: [instructorId], references: [id])
+  blueprintId      String?
+  blueprint        Blueprint?               @relation(fields: [blueprintId], references: [id], onDelete: SetNull)
+  name             String
+  weightPercent    Float
+  maxPoints        Float
+  status           GradeAssessmentStatus    @default(DRAFT)
+  submittedAt      DateTime?
+  reviewedAt       DateTime?
+  reviewedById     String?
+  reviewedBy       Coordinator?             @relation("GradeAssessmentReviewer", fields: [reviewedById], references: [id])
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  entries          GradeEntry[]
+
+  @@index([courseId, courseOfferingId])
+  @@index([instructorId])
+}
+
+model Gradebook {
+  id               String             @id @default(uuid())
+  courseOfferingId String             @unique
+  courseOffering   CourseOffering     @relation(fields: [courseOfferingId], references: [id], onDelete: Cascade)
+  status           GradebookStatus    @default(DRAFT)
+  submittedAt      DateTime?
+  reviewedAt       DateTime?
+  reviewedById     String?
+  reviewedBy       Coordinator?       @relation("GradebookReviewer", fields: [reviewedById], references: [id])
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  comments         GradebookComment[]
+
+  @@index([status])
+}
+
+model GradeEntry {
+  id           String          @id @default(uuid())
+  assessmentId String
+  assessment   GradeAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  rawPoints    Float?
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([assessmentId, studentId])
+}
+
+model GradebookComment {
+  id            String      @id @default(uuid())
+  gradebookId   String
+  gradebook     Gradebook   @relation(fields: [gradebookId], references: [id], onDelete: Cascade)
+  coordinatorId String
+  coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Cascade)
+  content       String
+  createdAt     DateTime    @default(now())
+}
+
+// ─── Course Reports ────────────────────────────────────────────────────────────
+
+enum CourseReportStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  NEEDS_REVISION
+}
+
+model CourseReport {
+  id                 String                @id @default(uuid())
+  courseOfferingId   String                @unique
+  courseOffering     CourseOffering        @relation(fields: [courseOfferingId], references: [id], onDelete: Cascade)
+  instructorId       String
+  instructor         Instructor            @relation(fields: [instructorId], references: [id])
+  status             CourseReportStatus    @default(DRAFT)
+  responses          Json?
+  submittedAt        DateTime?
+  reviewedAt         DateTime?
+  reviewedById       String?
+  reviewedBy         Coordinator?          @relation("CourseReportReviewer", fields: [reviewedById], references: [id])
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  comments           CourseReportComment[]
+
+  @@index([instructorId])
+  @@index([status])
+}
+
+model CourseReportComment {
+  id            String       @id @default(uuid())
+  courseReportId String
+  courseReport   CourseReport @relation(fields: [courseReportId], references: [id], onDelete: Cascade)
+  coordinatorId  String
+  coordinator    Coordinator  @relation(fields: [coordinatorId], references: [id], onDelete: Cascade)
+  content        String
+  createdAt      DateTime     @default(now())
 }

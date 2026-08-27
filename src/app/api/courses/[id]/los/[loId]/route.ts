@@ -1,32 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; loId: string }> }
 ) {
-  const coordinator = await getCoordinatorFromCookies();
-  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { loId } = await params;
-  const { code, description } = await req.json();
-
-  const lo = await prisma.learningOutcome.update({
-    where: { id: loId },
-    data: { code, description },
-  });
-  return NextResponse.json(lo);
+  await params;
+  await req.json().catch(() => null);
+  return NextResponse.json(
+    { error: "CLOs are managed through syllabus import for the selected term." },
+    { status: 410 }
+  );
 }
 
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; loId: string }> }
 ) {
-  const coordinator = await getCoordinatorFromCookies();
-  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { loId } = await params;
-  await prisma.learningOutcome.delete({ where: { id: loId } });
-  return NextResponse.json({ success: true });
+  await params;
+  return NextResponse.json(
+    { error: "CLOs imported for term history cannot be deleted through the legacy CLO API." },
+    { status: 410 }
+  );
 }

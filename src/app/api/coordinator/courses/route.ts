@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
+import { getVerifiedCoordinator } from "@/lib/session.server";
 
 // GET courses for majors assigned to this coordinator
 export async function GET(req: NextRequest) {
-  const coordinator = await getCoordinatorFromCookies();
+  const coordinator = await getVerifiedCoordinator();
   if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const majorId = req.nextUrl.searchParams.get("majorId");

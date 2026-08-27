@@ -1,45 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; topicId: string }> }
 ) {
-  const coordinator = await getCoordinatorFromCookies();
-  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { topicId } = await params;
-  const { name, description, sortOrder, loIds } = await req.json();
-
-  // Update topic and replace LO links
-  const topic = await prisma.$transaction(async (tx) => {
-    await tx.topicLO.deleteMany({ where: { topicId } });
-    return tx.topic.update({
-      where: { id: topicId },
-      data: {
-        name,
-        description,
-        sortOrder,
-        los: loIds?.length
-          ? { create: loIds.map((loId: string) => ({ learningOutcomeId: loId })) }
-          : undefined,
-      },
-      include: { los: { include: { learningOutcome: true } } },
-    });
-  });
-
-  return NextResponse.json(topic);
+  await params;
+  await req.json().catch(() => null);
+  return NextResponse.json(
+    { error: "Topics are managed through syllabus import for the selected term." },
+    { status: 410 }
+  );
 }
 
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; topicId: string }> }
 ) {
-  const coordinator = await getCoordinatorFromCookies();
-  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { topicId } = await params;
-  await prisma.topic.delete({ where: { id: topicId } });
-  return NextResponse.json({ success: true });
+  await params;
+  return NextResponse.json(
+    { error: "Topics imported for term history cannot be deleted through the legacy topic API." },
+    { status: 410 }
+  );
 }

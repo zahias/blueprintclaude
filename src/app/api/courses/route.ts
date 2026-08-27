@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCoordinatorFromCookies } from "@/lib/coordinatorAuth";
 
 export async function GET(req: NextRequest) {
   const majorId = req.nextUrl.searchParams.get("majorId");
@@ -18,16 +17,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const coordinator = await getCoordinatorFromCookies();
-  if (!coordinator) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { majorId, code, name, description } = await req.json();
-  if (!majorId || !code || !name) {
-    return NextResponse.json({ error: "majorId, code, and name are required" }, { status: 400 });
-  }
-
-  const course = await prisma.course.create({
-    data: { majorId, code, name, description },
-  });
-  return NextResponse.json(course, { status: 201 });
+  await req.json().catch(() => null);
+  return NextResponse.json(
+    { error: "Courses are created through progress report import and completed through syllabus import." },
+    { status: 410 }
+  );
 }
