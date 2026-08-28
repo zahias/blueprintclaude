@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getVerifiedCoordinator } from "@/lib/session.server";
 import { getCoordinatorMajorIds } from "@/lib/gradebook.server";
+import { notifyBlueprintCommentAdded } from "@/lib/email";
 
 export async function POST(
   req: NextRequest,
@@ -26,6 +27,8 @@ export async function POST(
     },
     include: { coordinator: { select: { name: true } } },
   });
+
+  void notifyBlueprintCommentAdded(blueprint.id, content);
 
   return NextResponse.json(comment, { status: 201 });
 }

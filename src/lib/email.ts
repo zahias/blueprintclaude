@@ -170,6 +170,40 @@ export async function notifyBlueprintStatusChange(
   }
 }
 
+export async function notifyBlueprintCommentAdded(
+  blueprintId: string,
+  comment: string
+) {
+  try {
+    const bp = await prisma.blueprint.findUnique({
+      where: { id: blueprintId },
+      include: {
+        instructor: { select: { email: true, name: true } },
+        course: { select: { code: true, name: true } },
+      },
+    });
+
+    if (!bp?.instructor?.email) return;
+
+    await sendEmail(
+      bp.instructor.email,
+      `New Blueprint Comment: ${bp.title}`,
+      layout(`
+        <h2 style="color:#1e293b;margin:0 0 16px">New Coordinator Comment</h2>
+        <p>A coordinator added a comment to your blueprint.</p>
+        ${field("Title", bp.title)}
+        ${field("Course", `${bp.course.code} — ${bp.course.name}`)}
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin:16px 0;color:#1e293b">
+          ${escapeHtml(comment)}
+        </div>
+        ${btn(`${BASE_URL}/instructor/edit/${bp.accessToken}`, "Open Blueprint")}
+      `)
+    );
+  } catch (err) {
+    console.error("[email] notifyBlueprintCommentAdded failed:", err);
+  }
+}
+
 // ─── HTML Helpers ───────────────────────────────────────────────────────────────
 
 function escapeHtml(text: string) {

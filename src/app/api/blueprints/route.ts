@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getVerifiedAdmin } from "@/lib/session.server";
-import { getInstructorFromCookies } from "@/lib/instructorAuth";
+import { getVerifiedAdmin, getVerifiedInstructor } from "@/lib/session.server";
 import { getInstructorActiveOffering } from "@/lib/terms.server";
 import {
   getBlueprintPayloadIssues,
@@ -10,6 +9,7 @@ import {
   type BlueprintQuestionFormatEntry,
   type BlueprintTopicEntry,
 } from "@/lib/types";
+import { notifyBlueprintStatusChange } from "@/lib/email";
 
 // Admin: list all blueprints with optional filters
 export async function GET(req: NextRequest) {
@@ -54,9 +54,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "totalMarks must be 0 or more" }, { status: 400 });
   }
 
-  const instructor = await getInstructorFromCookies();
-  const activeOffering = instructor ? await getInstructorActiveOffering(courseId, instructor) : null;
-  if (instructor && !activeOffering) {
+  const instructor = await getVerifiedInstructor();
+  if (!instructor) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const activeOffering = await getInstructorActiveOffering(courseId, instructor);
+  if (!activeOffering) {
     return NextResponse.json({ error: "Blueprints can only be created for active-term assigned courses" }, { status: 403 });
   }
 
@@ -76,10 +79,8 @@ export async function POST(req: NextRequest) {
       label: format.label || format.formatType.replaceAll("_", " "),
     }));
   const payloadIssues = getBlueprintPayloadIssues(topicEntries, courseTopics);
-  const formatIssues = getQuestionFormatIssues(formatEntries, parsedTotalMarks, status === "SUBMITTED");
-  const submitIssues = status === "SUBMITTED"
-    ? getSubmitIssues(topicEntries, courseTopics, parsedTotalMarks)
-    : [];
+  const formatIssues = getQuestionFormatIssues(formatEntries, parsedTotalMarks, true);
+  const submitIssues = getSubmitIssues(topicEntries, courseTopics, parsedTotalMarks);
   const issues = [
     ...payloadIssues,
     ...formatIssues.filter((issue) => !payloadIssues.includes(issue)),
@@ -92,12 +93,12 @@ export async function POST(req: NextRequest) {
   const blueprint = await prisma.blueprint.create({
     data: {
       courseId,
-      courseOfferingId: activeOffering?.id || null,
+      courseOfferingId: activeOffering.id,
       instructorName,
-      instructorId: instructor?.id || null,
+      instructorId: instructor.id,
       title,
-      semester: activeOffering?.term.semester || semester || null,
-      academicYear: activeOffering?.term.academicYear || academicYear || null,
+      semester: activeOffering.term.semester || semester || null,
+      academicYear: activeOffering.term.academicYear || academicYear || null,
       examDate: examDate ? new Date(examDate) : null,
       duration: duration || null,
       totalMarks: parsedTotalMarks,
@@ -146,6 +147,8 @@ export async function POST(req: NextRequest) {
       questionFormats: true,
     },
   });
+
+  if (blueprint.status === "SUBMITTED") void notifyBlueprintStatusChange(blueprint.id, "SUBMITTED");
 
   return NextResponse.json(blueprint, { status: 201 });
 }

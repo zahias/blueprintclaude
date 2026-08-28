@@ -365,7 +365,7 @@ export default function InstructorCourseGradebookPage({ params }: { params: Prom
           </div>
           <div className="flex gap-2">
             <button onClick={saveGrades} disabled={saving || !editable || gradebookLocked || gradebook.gradeAssessments.length === 0} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50">
-              {saving ? "Saving..." : "Save Grades"}
+              {saving ? "Saving..." : "Save progress"}
             </button>
             <button onClick={() => setStep("preview")} disabled={!gradeEntryEnabled} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50">
               Preview

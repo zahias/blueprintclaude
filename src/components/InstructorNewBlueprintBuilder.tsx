@@ -182,6 +182,10 @@ export function InstructorNewBlueprintBuilder() {
   }
 
   const handleSave = useCallback(async (status: "DRAFT" | "SUBMITTED") => {
+    if (!canSubmit) {
+      setSaveError(allSubmitIssues.join(" "));
+      return;
+    }
     setSaving(true);
     setSaveError("");
     try {
@@ -221,12 +225,12 @@ export function InstructorNewBlueprintBuilder() {
     } finally {
       setSaving(false);
     }
-  }, [selectedCourseId, instructorName, examType, totalQuestions, semester, academicYear, topicEntries, questionFormats, savedToken]);
+  }, [canSubmit, allSubmitIssues, selectedCourseId, instructorName, examType, totalQuestions, semester, academicYear, topicEntries, questionFormats, savedToken]);
 
   useEffect(() => {
     if (!savedToken) return;
     const timer = setInterval(() => {
-      if (dirtyRef.current) {
+      if (dirtyRef.current && canSubmit) {
         dirtyRef.current = false;
         handleSave("DRAFT").then(() => {
           setAutoSaved(true);
@@ -235,7 +239,7 @@ export function InstructorNewBlueprintBuilder() {
       }
     }, 30000);
     return () => clearInterval(timer);
-  }, [savedToken, handleSave]);
+  }, [savedToken, handleSave, canSubmit]);
 
   if (loading) return <div className="text-gray-500">Loading blueprint setup...</div>;
 
@@ -465,8 +469,9 @@ export function InstructorNewBlueprintBuilder() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 onClick={() => handleSave("DRAFT")}
-                disabled={saving || topicEntries.length === 0}
+                disabled={saving || !canSubmit}
                 className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                title={!canSubmit ? "Complete all blueprint sections before saving a draft" : ""}
               >
                 {saving ? "Saving..." : "Save Draft"}
               </button>

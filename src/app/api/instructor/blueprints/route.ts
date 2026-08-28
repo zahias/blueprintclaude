@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     orderBy: { updatedAt: "desc" },
     include: {
       course: { include: { major: { select: { name: true } } } },
+      courseOffering: { include: { term: true } },
       _count: { select: { topics: true, comments: true } },
     },
   });

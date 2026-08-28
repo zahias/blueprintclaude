@@ -155,10 +155,8 @@ export async function PUT(
       label: format.label || format.formatType.replaceAll("_", " "),
     }));
   const payloadIssues = getBlueprintPayloadIssues(topicEntries, courseTopics);
-  const formatIssues = getQuestionFormatIssues(formatEntries, parsedTotalMarks, status === "SUBMITTED");
-  const submitIssues = status === "SUBMITTED"
-    ? getSubmitIssues(topicEntries, courseTopics, parsedTotalMarks)
-    : [];
+  const formatIssues = getQuestionFormatIssues(formatEntries, parsedTotalMarks, true);
+  const submitIssues = getSubmitIssues(topicEntries, courseTopics, parsedTotalMarks);
   const issues = [
     ...payloadIssues,
     ...formatIssues.filter((issue) => !payloadIssues.includes(issue)),

@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS } from "@/lib/constants";
 import BlueprintQuestionReview from "@/components/BlueprintQuestionReview";
+import type { BlueprintQuestionFormatEntry } from "@/lib/types";
 
 interface Blueprint {
   id: string;
@@ -42,6 +43,7 @@ interface Blueprint {
       los: { learningOutcomeId: string; learningOutcome: { code: string } }[];
     };
   }[];
+  questionFormats: BlueprintQuestionFormatEntry[];
   comments: { id: string; content: string; createdAt: string; admin: { name: string } | null; coordinator: { name: string } | null }[];
 }
 
@@ -68,7 +70,7 @@ export default function ViewBlueprintPage({ params }: { params: Promise<{ token:
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
-          <Link href="/" className="text-indigo-600 hover:text-indigo-800 text-sm">← Back to Home</Link>
+          <Link href="/login" className="text-indigo-600 hover:text-indigo-800 text-sm">← Back to Login</Link>
         </div>
       </div>
     );
@@ -82,7 +84,7 @@ export default function ViewBlueprintPage({ params }: { params: Promise<{ token:
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-gray-400 hover:text-gray-700">
+            <Link href="/login" className="text-gray-400 hover:text-gray-700" title="Back to Login">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
@@ -143,6 +145,7 @@ export default function ViewBlueprintPage({ params }: { params: Promise<{ token:
           totalQuestionsExpected={blueprint.totalMarks}
           courseLOs={blueprint.course.los}
           topics={blueprint.topics}
+          questionFormats={blueprint.questionFormats || []}
           issues={totalQuestions === blueprint.totalMarks ? [] : [`Matrix has ${totalQuestions} questions but Exam Details says ${blueprint.totalMarks}`]}
         />
 

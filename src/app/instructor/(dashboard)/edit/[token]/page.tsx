@@ -3,10 +3,17 @@
 import { useEffect, useState, use, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import BlueprintBloomMatrix from "@/components/BlueprintBloomMatrix";
+import BlueprintQuestionFormatMatrix from "@/components/BlueprintQuestionFormatMatrix";
+import BlueprintQuestionReview from "@/components/BlueprintQuestionReview";
 import BlueprintTopicSelector from "@/components/BlueprintTopicSelector";
 import QADashboard from "@/components/QADashboard";
 import { BLUEPRINT_STATUS_COLORS, BLUEPRINT_STATUS_LABELS } from "@/lib/constants";
-import { type BlueprintTopicEntry, getSubmitIssues } from "@/lib/types";
+import {
+  type BlueprintQuestionFormatEntry,
+  type BlueprintTopicEntry,
+  getQuestionFormatIssues,
+  getSubmitIssues,
+} from "@/lib/types";
 
 const EXAM_TYPES = ["Midterm", "Final", "Major Exam"] as const;
 
@@ -50,11 +57,14 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
   const [instructorName, setInstructorName] = useState("");
   const [status, setStatus] = useState("");
   const [courseId, setCourseId] = useState("");
+  const [courseLabel, setCourseLabel] = useState("");
 
   const [topicEntries, setTopicEntries] = useState<BlueprintTopicEntry[]>([]);
+  const [questionFormats, setQuestionFormats] = useState<BlueprintQuestionFormatEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
   const [autoSaved, setAutoSaved] = useState(false);
   const [showMobileQA, setShowMobileQA] = useState(false);
@@ -77,7 +87,15 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
       setInstructorName(bp.instructorName);
       setStatus(bp.status);
       setCourseId(bp.courseId);
+      setCourseLabel(bp.course ? `${bp.course.code} - ${bp.course.name}` : bp.courseId);
       setComments(bp.comments || []);
+      setQuestionFormats((bp.questionFormats || []).map((format: BlueprintQuestionFormatEntry) => ({
+        formatType: format.formatType,
+        group: format.group,
+        label: format.label,
+        questionCount: format.questionCount,
+        gradeWeight: format.gradeWeight,
+      })));
 
       const courseParams = new URLSearchParams();
       if (bp.semester && bp.academicYear) {
@@ -146,10 +164,31 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
   const matrixQuestionTotal = topicEntries.reduce((s, te) => s + te.questionCount, 0);
   const examTotalCalc = parseFloat(totalMarks) || 0;
   const submitIssues = getSubmitIssues(topicEntries, topics, examTotalCalc);
-  const canSubmit = submitIssues.length === 0;
+  const questionFormatIssues = getQuestionFormatIssues(questionFormats, examTotalCalc, true);
+  const allIssues = [...submitIssues, ...questionFormatIssues];
+  const canSave = allIssues.length === 0;
+
+  const reviewTopics = topicEntries.map((entry) => {
+    const topic = topics.find((item) => item.id === entry.topicId);
+    return {
+      ...entry,
+      topic: {
+        name: topic?.name || "",
+        los: topic?.los.map((lo) => ({
+          learningOutcomeId: lo.learningOutcomeId,
+          learningOutcome: { code: lo.learningOutcome.code, description: lo.learningOutcome.description },
+        })) || [],
+      },
+    };
+  });
 
   const handleSave = useCallback(async (newStatus: "DRAFT" | "SUBMITTED") => {
+    if (!canSave) {
+      setSaveError(allIssues.join(" "));
+      return;
+    }
     setSaving(true);
+    setSaveError("");
     try {
       const normalizedEntries = topicEntries.map((entry) => ({
         ...entry,
@@ -168,9 +207,11 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
           semester: semester || null,
           academicYear: academicYear || null,
           topics: normalizedEntries,
+          questionFormats,
           status: newStatus,
         }),
       });
+      const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
         dirtyRef.current = false;
@@ -180,16 +221,18 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
         if (newStatus === "SUBMITTED") {
           router.push("/instructor");
         }
+      } else {
+        setSaveError(data.issues?.join(" ") || data.error || "Could not save blueprint.");
       }
     } finally {
       setSaving(false);
     }
-  }, [token, courseId, instructorName, title, totalMarks, semester, academicYear, topicEntries, router]);
+  }, [token, canSave, allIssues, courseId, instructorName, title, totalMarks, semester, academicYear, topicEntries, questionFormats, router]);
 
   // Auto-save every 30 seconds when dirty + editable
   useEffect(() => {
     const timer = setInterval(() => {
-      if (dirtyRef.current && !saving && (status === "DRAFT" || status === "NEEDS_REVISION")) {
+      if (dirtyRef.current && canSave && !saving && (status === "DRAFT" || status === "NEEDS_REVISION")) {
         handleSave("DRAFT").then(() => {
           setAutoSaved(true);
           setTimeout(() => setAutoSaved(false), 2000);
@@ -197,7 +240,7 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
       }
     }, 30000);
     return () => clearInterval(timer);
-  }, [saving, status, handleSave]);
+  }, [canSave, saving, status, handleSave]);
 
   if (loading) return <div className="text-gray-500">Loading blueprint...</div>;
 
@@ -228,16 +271,17 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             <>
               <button
                 onClick={() => handleSave("DRAFT")}
-                disabled={saving || topicEntries.length === 0}
+                disabled={saving || !canSave}
                 className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition disabled:opacity-50"
+                title={!canSave ? "Complete all blueprint sections before saving a draft" : ""}
               >
                 {saving ? "Saving..." : "Save Draft"}
               </button>
               <button
                 onClick={() => handleSave("SUBMITTED")}
-                disabled={saving || !canSubmit}
+                disabled={saving || !canSave}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition disabled:opacity-50"
-                title={!canSubmit ? "Resolve all issues below before submitting" : ""}
+                title={!canSave ? "Resolve all issues below before submitting" : ""}
               >
                 {saving ? "Submitting..." : "Submit for Review"}
               </button>
@@ -246,12 +290,18 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
         </div>
       </div>
 
+      {saveError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-sm text-red-700">
+          {saveError}
+        </div>
+      )}
+
       {/* Submit checklist — shown when there are issues */}
-      {canEdit && !canSubmit && topicEntries.length > 0 && (
+      {canEdit && allIssues.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
-          <p className="text-sm font-medium text-amber-800 mb-2">Fix these issues to submit:</p>
+          <p className="text-sm font-medium text-amber-800 mb-2">Current issues</p>
           <ul className="list-disc list-inside text-sm text-amber-700 space-y-0.5">
-            {submitIssues.map((issue, i) => <li key={i}>{issue}</li>)}
+            {allIssues.map((issue, i) => <li key={i}>{issue}</li>)}
           </ul>
         </div>
       )}
@@ -329,6 +379,11 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
             <div className="space-y-5">
               <BlueprintTopicSelector topics={topics} entries={topicEntries} onChange={(entries) => { setTopicEntries(entries); dirtyRef.current = true; }} />
               <BlueprintBloomMatrix topics={topics} entries={topicEntries} onChange={(entries) => { setTopicEntries(entries); dirtyRef.current = true; }} />
+              <BlueprintQuestionFormatMatrix
+                formats={questionFormats}
+                totalQuestionsExpected={examTotalCalc}
+                onChange={(formats) => { setQuestionFormats(formats); dirtyRef.current = true; }}
+              />
             </div>
           ) : (
             <BlueprintBloomMatrix topics={topics} entries={topicEntries} onChange={() => undefined} disabled />
@@ -341,13 +396,26 @@ export default function InstructorEditBlueprintPage({ params }: { params: Promis
         </div>
       </div>
 
+      <div className="mt-6">
+        <BlueprintQuestionReview
+          examType={title}
+          courseLabel={courseLabel}
+          termLabel={`${semester} ${academicYear}`.trim()}
+          totalQuestionsExpected={examTotalCalc}
+          courseLOs={los}
+          topics={reviewTopics}
+          questionFormats={questionFormats}
+          issues={allIssues}
+        />
+      </div>
+
       {/* Mobile QA floating button */}
       <button
         onClick={() => setShowMobileQA(true)}
         className="fixed bottom-4 right-4 xl:hidden bg-indigo-600 text-white rounded-full w-12 h-12 shadow-lg flex items-center justify-center z-40 hover:bg-indigo-700 transition"
       >
-        {!canSubmit && topicEntries.length > 0 ? (
-          <span className="text-sm font-bold">{submitIssues.length}</span>
+        {!canSave && topicEntries.length > 0 ? (
+          <span className="text-sm font-bold">{allIssues.length}</span>
         ) : (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />

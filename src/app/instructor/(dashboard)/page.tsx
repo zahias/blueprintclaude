@@ -22,6 +22,9 @@ interface Blueprint {
     name: string;
     major: { name: string };
   };
+  courseOffering?: {
+    term?: { id: string; semester: string; academicYear: string } | null;
+  } | null;
   _count: { topics: number; comments: number };
 }
 
@@ -153,6 +156,13 @@ function InstructorDashboardContent() {
           bloomEvaluate: t.bloomEvaluate,
           bloomCreate: t.bloomCreate,
         })),
+        questionFormats: (data.questionFormats || []).map((format: { formatType: string; group: string; label?: string; questionCount: number; gradeWeight: number }) => ({
+          formatType: format.formatType,
+          group: format.group,
+          label: format.label,
+          questionCount: format.questionCount,
+          gradeWeight: format.gradeWeight,
+        })),
         status: "DRAFT",
       };
       const createRes = await fetch("/api/blueprints", {
@@ -174,10 +184,16 @@ function InstructorDashboardContent() {
   }
 
   const activeBlueprints = activeTerm
-    ? blueprints.filter((bp) => bp.semester === activeTerm.semester && bp.academicYear === activeTerm.academicYear)
+    ? blueprints.filter((bp) => {
+        if (bp.courseOffering?.term?.id) return bp.courseOffering.term.id === activeTerm.id;
+        return bp.semester === activeTerm.semester && bp.academicYear === activeTerm.academicYear;
+      })
     : [];
   const archivedBlueprints = activeTerm
-    ? blueprints.filter((bp) => bp.semester !== activeTerm.semester || bp.academicYear !== activeTerm.academicYear)
+    ? blueprints.filter((bp) => {
+        if (bp.courseOffering?.term?.id) return bp.courseOffering.term.id !== activeTerm.id;
+        return bp.semester !== activeTerm.semester || bp.academicYear !== activeTerm.academicYear;
+      })
     : blueprints;
   const activeCourses = courses.filter((course) => course.editable);
   const gradeNeedsRevision = activeCourses.filter((course) => course.gradebookStatus === "NEEDS_REVISION");

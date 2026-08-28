@@ -36,8 +36,8 @@ export default function LookupPage() {
           </button>
         </form>
 
-        <a href="/" className="inline-block mt-4 text-sm text-gray-500 hover:text-gray-700">
-          ← Back to Home
+        <a href="/login" className="inline-block mt-4 text-sm text-gray-500 hover:text-gray-700">
+          ← Back to Login
         </a>
       </div>
     </div>
